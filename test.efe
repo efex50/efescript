@@ -9,10 +9,10 @@ mov QWORDPTR [ebp+40],0xC3B6796C656E6469
 mov DWORDPTR [ebp+48],0x203A2020
 mov esp,52
 
-
 mov e1,10
 cmp e1,11
 jne _salam
+
 
 
 label _main
@@ -68,6 +68,12 @@ mov eax,0
 mov ebx,0x0a
 syscall
 
+
+mov eax,255
+mov ebx,DWORDPTR [ebp]
+mov ecx,DWORDPTR [ebp+4]
+
+syscall
 
 
 mov eax,3
