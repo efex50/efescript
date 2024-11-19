@@ -4,11 +4,11 @@ use std::collections::HashMap;
 use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::ToPrimitive;
 
-use crate::{funs::{as_usize, get_db_data, trim_zeroes}, ops::OpCodes, syscalls::SysCalls};
+use crate::{funs::{as_usize, get_db_data, trim_zeroes}, ops::OpCodes};
 
 
 #[derive(Debug)]
-pub enum PreCompile{
+pub(crate) enum PreCompile{
     I(Instuction),
     L(String)
 }
@@ -27,71 +27,42 @@ pub enum PreCompile{
 
 
 #[derive(Debug)]
-pub struct Instuction{
+pub(crate) struct Instuction{
     pub opcode:OpCodes,
     pub operandl:Operands,
     pub operandr:Operands,
 }
 impl Instuction {
     
-    pub fn from_slice(){}
     pub fn get_len(&self) -> usize {
         let mut len = 1 ;
-        let b = self.operandl.to_int();
-        len += b.len();
-        let b = self.operandr.to_int();
-        len += b.len();
+        if self.operandl != Operands::Null{
+            let b = self.operandl.to_int();
+            len += b.len();
+        }
+        if self.operandr != Operands::Null{
+            let b = self.operandr.to_int();
+            len += b.len();
+        }
         len
     }
     pub fn get_program(&self) -> Vec<u8> {
         let mut v = Vec::new() ;
         v.push(self.opcode.to_u8().unwrap());
-        let mut b = self.operandl.to_int();
-        v.append(&mut b);
-        let mut b = self.operandr.to_int();
-        v.append(&mut b);
+        if self.operandl != Operands::Null{
+            let mut b = self.operandl.to_int();
+            v.append(&mut b);
+        }
+        if self.operandr != Operands::Null{
+            let mut b = self.operandr.to_int();
+            v.append(&mut b);            
+        }
         v
-    }
-    pub fn to_program(&self,labelmap:&HashMap<String,usize>) -> Vec<u8>{
-        let mut p: Vec<u8> = Vec::new();
-        let op = self.opcode.to_u8().unwrap();
-        p.push(op);
-        match &self.operandl {
-            Operands::Label(l) => {
-
-                let a = labelmap.get(l).unwrap();
-                let mut l = trim_zeroes(a.to_be_bytes().to_vec());
-                p.push(0);
-                p.push(l.len() as u8);
-                p.append(&mut l);
-            },
-            _ => {
-                let mut a = self.operandl.to_int();
-                p.append(&mut a);
-            },
-        };
-        match &self.operandr {
-            Operands::Label(l) => {
-
-                let a = labelmap.get(l).unwrap();
-                let mut l = trim_zeroes(a.to_be_bytes().to_vec());
-                p.push(0);
-                p.push(l.len() as u8);
-                p.append(&mut l);
-            },
-            _ => {
-                let mut a = self.operandr.to_int();
-                p.append(&mut a);
-            },
-        };
-        p
-
-
     }
 }
 
 #[derive(Debug,PartialEq)]
-pub enum SimpleOperands{
+pub(crate) enum SimpleOperands{
     Reg,
     PushPop,
     Static,
@@ -136,7 +107,7 @@ impl SimpleOperands {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-pub enum Operands{
+pub(crate) enum Operands{
     Static(usize),
     String(Vec<u8>),
     Label(String),
@@ -506,7 +477,7 @@ impl Operands{
 }
 
 #[derive(Debug, PartialEq, Eq)]
-pub enum PtrInner{
+pub(crate) enum PtrInner{
     Static(usize),
     Reg(Registers),
     Sum(Registers,usize),
@@ -570,7 +541,6 @@ impl PtrInner {
                             return None;
                         },
                     };
-        
                 },
             }
         };
@@ -603,7 +573,7 @@ impl PtrInner {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-pub enum Registers{
+pub(crate) enum Registers{
     EAX,
     EBX,
     ECX,
@@ -700,7 +670,7 @@ impl Registers {
 /// bytecode definition
 #[repr(u8)]
 #[derive(Debug, PartialEq, Eq,ToPrimitive,FromPrimitive,Clone)]
-pub enum OperandType{
+pub(crate) enum OperandType{
     Static = 0,
     EAX = 1,
     EBX,
@@ -730,8 +700,6 @@ pub enum OperandType{
     String,
     NOP = 0xff,
 }
-
-
 
 
 fn parse_operand_types<S:Into<String>>(data:S) -> Option<OperandType>{
@@ -773,7 +741,7 @@ fn parse_operand_types<S:Into<String>>(data:S) -> Option<OperandType>{
 }
 
 
-pub fn parse_register_type_to_op(a:OperandType) -> Option<Operands>{
+pub(crate) fn parse_register_type_to_op(a:OperandType) -> Option<Operands>{
     match a {
         OperandType::EAX => Some(Operands::EAX),
         OperandType::EBX => Some(Operands::EBX),
@@ -953,20 +921,20 @@ fn parse_str_to_instructions(str:String) -> Vec<PreCompile> {
             buf.push(byte);
         };
 
-
         match opcode   
         {
-            OpCodes::Jmp |
-            OpCodes::Je  |
-            OpCodes::Jge |
-            OpCodes::Jgt |
-            OpCodes::Jle |
-            OpCodes::Jlt |
-            OpCodes::Jne |
-            OpCodes::Jnz |
-            OpCodes::Jz => {
+            OpCodes::Jmp    |
+            OpCodes::Je     |
+            OpCodes::Jge    |
+            OpCodes::Jgt    |
+            OpCodes::Jle    |
+            OpCodes::Jlt    |
+            OpCodes::Jne    |
+            OpCodes::Jnz    |
+            OpCodes::Call   |
+            OpCodes::Jz     => {
                 let mut  cc = Vec::new();
-                while let Some(a) = iter.next() {
+                while let Some(a) = iter.next(){
                     cc.push(a);
                 };
                 cc.pop();
@@ -1049,10 +1017,12 @@ fn parse_str_to_instructions(str:String) -> Vec<PreCompile> {
                         if a == b']'{break;}
                         bbuu.push(a);
                     }
-                    let ptrin = PtrInner::from_str(String::from_utf8(bbuu).unwrap().trim()).unwrap();
-                    let c = Operands::Pointer(ptrin);
-                    break c;
+                        let text = String::from_utf8(bbuu).unwrap();
+                        let ptrin = PtrInner::from_str(text.trim()).unwrap();
+                        let c = Operands::Pointer(ptrin);
+                        break c;
                 }
+                
                 let a = parse_operand_types(str.trim()).unwrap();
                 let mut bbuu: Vec<u8> = Vec::new();
                 // WORDPTR [x] -> bbuu == x
@@ -1061,7 +1031,11 @@ fn parse_str_to_instructions(str:String) -> Vec<PreCompile> {
                     if a == b']'{break;}
                     bbuu.push(a);
                 }
-                let ptrin = PtrInner::from_str(String::from_utf8(bbuu).unwrap().trim()).unwrap();
+                
+                let text = String::from_utf8(bbuu).unwrap();
+                println!("ptrin text {}",text);
+                let ptrin = PtrInner::from_str(text.trim()).unwrap();
+                println!("ptrin {:?}",ptrin);
                 let c = match a {
                     OperandType::BYTEPTR  => Operands::BYTEPTR(ptrin),
                     OperandType::WORDPTR  => Operands::WORDPTR(ptrin),
@@ -1088,7 +1062,7 @@ fn parse_str_to_instructions(str:String) -> Vec<PreCompile> {
             opcode == OpCodes::Pop16    ||
             opcode == OpCodes::Pop32    ||
             opcode == OpCodes::Pop64    ||
-            opcode == OpCodes::Test   
+            opcode == OpCodes::Test
         {
             let i = Instuction{
                 opcode,
@@ -1154,8 +1128,9 @@ fn parse_str_to_instructions(str:String) -> Vec<PreCompile> {
                         if a == b']'{break;}
                         bbuu.push(a);
                     }
-                    let ptrin = PtrInner::from_str(String::from_utf8(bbuu).unwrap().trim()).unwrap();
-                    let c = Operands::Pointer(ptrin);
+                        let text = String::from_utf8(bbuu).unwrap();
+                        let ptrin = PtrInner::from_str(text.trim()).unwrap();
+                        let c = Operands::Pointer(ptrin);
                     break c;
                 }
                 let a = parse_operand_types(str.trim()).unwrap();
@@ -1166,7 +1141,8 @@ fn parse_str_to_instructions(str:String) -> Vec<PreCompile> {
                     if a == b']'{break;}
                     bbuu.push(a);
                 }
-                let ptrin = PtrInner::from_str(String::from_utf8(bbuu).unwrap().trim()).unwrap();
+                let text = String::from_utf8(bbuu).unwrap();
+                let ptrin = PtrInner::from_str(text.trim()).unwrap();
                 let c = match a {
                     OperandType::BYTEPTR  => Operands::BYTEPTR(ptrin),
                     OperandType::WORDPTR  => Operands::WORDPTR(ptrin),
@@ -1276,6 +1252,7 @@ mod nasm_compiler{
                             OpCodes::Jlt |
                             OpCodes::Jle |
                             OpCodes::Jge |
+                            OpCodes::Call |
                             OpCodes::Jz |
                             OpCodes::Jnz => {
                                 match inst.operandl{

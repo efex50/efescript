@@ -1,7 +1,7 @@
 use num_derive::{FromPrimitive, ToPrimitive};
 
 
-
+/// programming apis
 #[derive(Debug, PartialEq, Eq, FromPrimitive,ToPrimitive)]
 pub enum SysCalls{
     /// ebx -> char
@@ -67,7 +67,7 @@ pub enum SysCalls{
     /// ecx -> lenght of str
     Readln,
 
-    /// Reads console for string input max len :255
+    /// Reads console for string unitil break char from edx read input max len :usize
     ///
     /// writes on stack
     /// 
@@ -76,6 +76,8 @@ pub enum SysCalls{
     /// ebx -> pointer of str
     /// 
     /// ecx -> lenght of str
+    /// 
+    /// edx -> line break u8 sign
     Read,
 
 
@@ -86,7 +88,7 @@ pub enum SysCalls{
 
 
     /// raylib helloworld
-    SdlEx1 = 255,
+    RaylibEx1 = 255,
 
 }
 
