@@ -1,0 +1,3 @@
+[submodule "efearena"]
+	path = efearena
+	url = https://github.com/efex50/efearena
