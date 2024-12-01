@@ -75,7 +75,7 @@ pub(super)  fn handle_syscalls(stack:&mut Arena){
             stack.write(reg!(ESP), s);
             reg!(ESP = ESP+str.len())
         },
-        SysCalls::Read => {
+        SysCalls::ReadCon => {
             
             let brk = reg!(EDX) as u8;
 

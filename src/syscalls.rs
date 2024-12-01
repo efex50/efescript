@@ -78,7 +78,7 @@ pub enum SysCalls{
     /// ecx -> lenght of str
     /// 
     /// edx -> line break u8 sign
-    Read,
+    ReadCon,
 
 
 
