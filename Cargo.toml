@@ -5,7 +5,7 @@ edition = "2021"
 
 
 [dependencies]
-efearena = { git="https://github.com/efex50/efearena" }
+efearena = { path="./efearena" }
 num-derive = "0.4.2"
 num-traits = "0.2.19"
 text_io = "0.1.12"
