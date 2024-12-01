@@ -1,6 +1,6 @@
 use num_traits::FromPrimitive;
 
-use super::{ as_be_bytes, nasm_efe::{OperandType, Operands, PtrInner, Registers, SimpleOperands}, reg, E1, E2, E3, E4, E5, E6, EAX, EBP, EBX, ECX, EDX, ESP};
+use super::{ as_be_bytes, nasm_efe::{OperandType, Operands, PtrInner, Registers, SimpleOperands}, reg, R1, R2, R3, R4, R5, R6, EAX, EBP, EBX, ECX, EDX, ESP};
 use efearena::Arena;
 
 pub enum NumToStr{
@@ -17,12 +17,12 @@ pub(super)  fn write_op_data(a:&Operands,r:usize,stack:&mut Arena){
         Operands::EDX => reg!(EDX = r),
         Operands::EBP => reg!(EBP = r),
         Operands::ESP => reg!(ESP = r),
-        Operands::E1 => reg!(E1 = r),
-        Operands::E2 => reg!(E2 = r),
-        Operands::E3 => reg!(E3 = r),
-        Operands::E4 => reg!(E4 = r),
-        Operands::E5 => reg!(E5 = r),
-        Operands::E6 => reg!(E6 = r),
+        Operands::R1 => reg!(R1 = r),
+        Operands::R2 => reg!(R2 = r),
+        Operands::R3 => reg!(R3 = r),
+        Operands::R4 => reg!(R4 = r),
+        Operands::R5 => reg!(R5 = r),
+        Operands::R6 => reg!(R6 = r),
         Operands::BYTEPTR(ptr_inner) | Operands::Pointer(ptr_inner) => {
             let addr = get_pointer_inner_addr(ptr_inner);
             
@@ -129,12 +129,12 @@ pub(super) fn get_op_data(a:&Operands,stack:&mut Arena) -> usize{
         Operands::EDX => reg!(EDX),
         Operands::EBP => reg!(EBP),
         Operands::ESP => reg!(ESP),
-        Operands::E1 => reg!(E1),
-        Operands::E2 => reg!(E2),
-        Operands::E3 => reg!(E3),
-        Operands::E4 => reg!(E4),
-        Operands::E5 => reg!(E5),
-        Operands::E6 => reg!(E6),
+        Operands::R1 => reg!(R1),
+        Operands::R2 => reg!(R2),
+        Operands::R3 => reg!(R3),
+        Operands::R4 => reg!(R4),
+        Operands::R5 => reg!(R5),
+        Operands::R6 => reg!(R6),
         Operands::AL => {
             let r = reg!(EAX);
             r & 0xff
@@ -224,12 +224,12 @@ fn regtype_to_reg_data(a:&Registers) -> usize{
         Registers::EDX => reg!(EDX),
         Registers::EBP => reg!(EBP),
         Registers::ESP => reg!(ESP),
-        Registers::E1 => reg!(E1),
-        Registers::E2 => reg!(E2),
-        Registers::E3 => reg!(E3),
-        Registers::E4 => reg!(E4),
-        Registers::E5 => reg!(E5),
-        Registers::E6 => reg!(E6),
+        Registers::R1 => reg!(R1),
+        Registers::R2 => reg!(R2),
+        Registers::R3 => reg!(R3),
+        Registers::R4 => reg!(R4),
+        Registers::R5 => reg!(R5),
+        Registers::R6 => reg!(R6),
         Registers::AL => {
             let r = reg!(EAX);
             r | 0xff

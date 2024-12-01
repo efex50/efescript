@@ -80,12 +80,12 @@ impl SimpleOperands {
             OperandType::EDX |
             OperandType::EBP |
             OperandType::ESP |
-            OperandType::E1 |
-            OperandType::E2 |
-            OperandType::E3 |
-            OperandType::E4 |
-            OperandType::E5 |
-            OperandType::E6 |
+            OperandType::R1 |
+            OperandType::R2 |
+            OperandType::R3 |
+            OperandType::R4 |
+            OperandType::R5 |
+            OperandType::R6 |
             OperandType::AL |
             OperandType::AH |
             OperandType::BL |
@@ -117,12 +117,12 @@ pub(crate) enum Operands{
     EDX,
     EBP,
     ESP,
-    E1,
-    E2,
-    E3,
-    E4,
-    E5,
-    E6,
+    R1,
+    R2,
+    R3,
+    R4,
+    R5,
+    R6,
     AL,
     AH,
     BL,
@@ -161,12 +161,12 @@ impl Operands{
             Operands::EDX => vec![OperandType::EDX.to_u8().unwrap()],
             Operands::EBP => vec![OperandType::EBP.to_u8().unwrap()],
             Operands::ESP => vec![OperandType::ESP.to_u8().unwrap()],
-            Operands::E1  => vec![OperandType::E1.to_u8().unwrap()],
-            Operands::E2  => vec![OperandType::E2.to_u8().unwrap()],
-            Operands::E3  => vec![OperandType::E3.to_u8().unwrap()],
-            Operands::E4  => vec![OperandType::E4.to_u8().unwrap()],
-            Operands::E5  => vec![OperandType::E5.to_u8().unwrap()],
-            Operands::E6  => vec![OperandType::E6.to_u8().unwrap()],
+            Operands::R1  => vec![OperandType::R1.to_u8().unwrap()],
+            Operands::R2  => vec![OperandType::R2.to_u8().unwrap()],
+            Operands::R3  => vec![OperandType::R3.to_u8().unwrap()],
+            Operands::R4  => vec![OperandType::R4.to_u8().unwrap()],
+            Operands::R5  => vec![OperandType::R5.to_u8().unwrap()],
+            Operands::R6  => vec![OperandType::R6.to_u8().unwrap()],
             Operands::AL => vec![OperandType::AL.to_u8().unwrap()],
             Operands::AH => vec![OperandType::AH.to_u8().unwrap()],
             Operands::BL => vec![OperandType::BL.to_u8().unwrap()],
@@ -580,12 +580,12 @@ pub(crate) enum Registers{
     EDX,
     EBP,
     ESP,
-    E1,
-    E2,
-    E3,
-    E4,
-    E5,
-    E6,
+    R1,
+    R2,
+    R3,
+    R4,
+    R5,
+    R6,
     AL,
     AH,
     BL,
@@ -605,12 +605,12 @@ impl Registers {
             "EDX" | "Edx" | "edx" => Some(Self::EDX),
             "ESP" | "Esp" | "esp" => Some(Self::ESP),
             "EBP" | "Ebp" | "ebp" => Some(Self::EBP),
-            "E1" | "e1" => Some(Self::E1),
-            "E2" | "e2" => Some(Self::E2),
-            "E3" | "e3" => Some(Self::E3),
-            "E4" | "e4" => Some(Self::E4),
-            "E5" | "e5" => Some(Self::E5),
-            "E6" | "e6" => Some(Self::E6),
+            "R1" | "r1" => Some(Self::R1),
+            "R2" | "r2" => Some(Self::R2),
+            "R3" | "r3" => Some(Self::R3),
+            "R4" | "r4" => Some(Self::R4),
+            "R5" | "r5" => Some(Self::R5),
+            "R6" | "r6" => Some(Self::R6),
             "AL" | "Al" |"al" => Some(Self::AL),
             "AH" | "Ah" |"ah" => Some(Self::AH),
             "BL" | "Bl" |"bl" => Some(Self::BL),
@@ -632,12 +632,12 @@ impl Registers {
             Registers::EDX => OperandType::EDX,
             Registers::EBP => OperandType::EBP,
             Registers::ESP => OperandType::ESP,
-            Registers::E1  => OperandType::E1,
-            Registers::E2  => OperandType::E2,
-            Registers::E3  => OperandType::E3,
-            Registers::E4  => OperandType::E4,
-            Registers::E5  => OperandType::E5,
-            Registers::E6  => OperandType::E6,
+            Registers::R1  => OperandType::R1,
+            Registers::R2  => OperandType::R2,
+            Registers::R3  => OperandType::R3,
+            Registers::R4  => OperandType::R4,
+            Registers::R5  => OperandType::R5,
+            Registers::R6  => OperandType::R6,
             Registers::AL => OperandType::AL,
             Registers::AH => OperandType::AH,
             Registers::BL => OperandType::BL,
@@ -656,12 +656,12 @@ impl Registers {
             OperandType::EDX => Self::EDX,
             OperandType::EBP => Self::EBP,
             OperandType::ESP => Self::ESP,
-            OperandType::E1 => Self::E1,
-            OperandType::E2 => Self::E2,
-            OperandType::E3 => Self::E3,
-            OperandType::E4 => Self::E4,
-            OperandType::E5 => Self::E5,
-            OperandType::E6 => Self::E6,
+            OperandType::R1 => Self::R1,
+            OperandType::R2 => Self::R2,
+            OperandType::R3 => Self::R3,
+            OperandType::R4 => Self::R4,
+            OperandType::R5 => Self::R5,
+            OperandType::R6 => Self::R6,
             _=> todo!(),
         }
     }
@@ -678,12 +678,12 @@ pub(crate) enum OperandType{
     EDX,
     EBP,
     ESP = 6,
-    E1,
-    E2,
-    E3,
-    E4,
-    E5,
-    E6 = 12,
+    R1,
+    R2,
+    R3,
+    R4,
+    R5,
+    R6 = 12,
     AL,
     AH,
     BL,
@@ -711,12 +711,12 @@ fn parse_operand_types<S:Into<String>>(data:S) -> Option<OperandType>{
         "EDX" | "Edx" | "edx" => Some(OperandType::EDX),
         "ESP" | "Esp" | "esp" => Some(OperandType::ESP),
         "EBP" | "Ebp" | "ebp" => Some(OperandType::EBP),
-        "E1" | "e1" => Some(OperandType::E1),
-        "E2" | "e2" => Some(OperandType::E2),
-        "E3" | "e3" => Some(OperandType::E3),
-        "E4" | "e4" => Some(OperandType::E4),
-        "E5" | "e5" => Some(OperandType::E5),
-        "E6" | "e6" => Some(OperandType::E6),
+        "R1" | "r1" => Some(OperandType::R1),
+        "R2" | "r2" => Some(OperandType::R2),
+        "R3" | "r3" => Some(OperandType::R3),
+        "R4" | "r4" => Some(OperandType::R4),
+        "R5" | "r5" => Some(OperandType::R5),
+        "R6" | "r6" => Some(OperandType::R6),
 
         "AL" | "Al" |"al" => Some(OperandType::AL),
         "AH" | "Ah" |"ah" => Some(OperandType::AH),
@@ -749,12 +749,12 @@ pub(crate) fn parse_register_type_to_op(a:OperandType) -> Option<Operands>{
         OperandType::EDX => Some(Operands::EDX),
         OperandType::EBP => Some(Operands::EBP),
         OperandType::ESP => Some(Operands::ESP),
-        OperandType::E1 => Some(Operands::E1),
-        OperandType::E2 => Some(Operands::E2),
-        OperandType::E3 => Some(Operands::E3),
-        OperandType::E4 => Some(Operands::E4),
-        OperandType::E5 => Some(Operands::E5),
-        OperandType::E6 => Some(Operands::E6),
+        OperandType::R1 => Some(Operands::R1),
+        OperandType::R2 => Some(Operands::R2),
+        OperandType::R3 => Some(Operands::R3),
+        OperandType::R4 => Some(Operands::R4),
+        OperandType::R5 => Some(Operands::R5),
+        OperandType::R6 => Some(Operands::R6),
         
         OperandType::AL => Some(Operands::AL),
         OperandType::AH => Some(Operands::AL),
@@ -983,11 +983,11 @@ fn parse_str_to_instructions(str:String) -> Vec<PreCompile> {
                     OperandType::EDX |
                     OperandType::EBP |
                     OperandType::ESP |
-                    OperandType::E1 |
-                    OperandType::E2 |
-                    OperandType::E3 |
-                    OperandType::E4 |
-                    OperandType::E5 |
+                    OperandType::R1 |
+                    OperandType::R2 |
+                    OperandType::R3 |
+                    OperandType::R4 |
+                    OperandType::R5 |
                     OperandType::AL |
                     OperandType::AH |
                     OperandType::BL |
@@ -996,7 +996,7 @@ fn parse_str_to_instructions(str:String) -> Vec<PreCompile> {
                     OperandType::CH |
                     OperandType::DL |
                     OperandType::DH |
-                    OperandType::E6 => parse_register_type_to_op(a).unwrap(),
+                    OperandType::R6 => parse_register_type_to_op(a).unwrap(),
                     OperandType::Pointer |
                     OperandType::BYTEPTR  |
                     OperandType::WORDPTR  |
@@ -1091,12 +1091,12 @@ fn parse_str_to_instructions(str:String) -> Vec<PreCompile> {
                     OperandType::EDX |
                     OperandType::EBP |
                     OperandType::ESP |
-                    OperandType::E1 |
-                    OperandType::E2 |
-                    OperandType::E3 |
-                    OperandType::E4 |
-                    OperandType::E5 |
-                    OperandType::E6 |
+                    OperandType::R1 |
+                    OperandType::R2 |
+                    OperandType::R3 |
+                    OperandType::R4 |
+                    OperandType::R5 |
+                    OperandType::R6 |
                     OperandType::AL |
                     OperandType::AH |
                     OperandType::BL |

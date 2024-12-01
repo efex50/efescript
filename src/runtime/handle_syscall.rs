@@ -100,5 +100,6 @@ pub(super)  fn handle_syscalls(stack:&mut Arena){
 
 
         SysCalls::ReadFs => todo!(),
+        SysCalls::WriteFs => todo!(),
     }
 }

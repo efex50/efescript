@@ -24,12 +24,12 @@ pub(crate)static mut EBP:usize = 0;
 /// stack pointer           d:6
 pub(crate)static mut ESP:usize = 0;
 //other registers
-pub(crate)static mut E1:usize = 0;
-pub(crate)static mut E2:usize = 0;
-pub(crate)static mut E3:usize = 0;
-pub(crate)static mut E4:usize = 0;
-pub(crate)static mut E5:usize = 0;
-pub(crate)static mut E6:usize = 0;
+pub(crate)static mut R1:usize = 0;
+pub(crate)static mut R2:usize = 0;
+pub(crate)static mut R3:usize = 0;
+pub(crate)static mut R4:usize = 0;
+pub(crate)static mut R5:usize = 0;
+pub(crate)static mut R6:usize = 0;
 
 
 pub(crate)mod flags{

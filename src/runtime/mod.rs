@@ -1,6 +1,7 @@
 pub(super)  mod handle_syscall;
 pub(super)  mod handle_opcodes;
 pub(super)  mod data_funs;
+pub(super)  mod program;
 
 use crate::*;
 

@@ -1,15 +1,22 @@
 use num_derive::{FromPrimitive, ToPrimitive};
 
 
+#[repr(usize)]
 /// programming apis
 #[derive(Debug, PartialEq, Eq, FromPrimitive,ToPrimitive)]
 pub enum SysCalls{
+    /// takes:
+    /// 
     /// ebx -> char
     /// 
-    /// prints unitill finds the null terminator
+    /// prints the char as utf8 encoded 
+    /// 
+    /// 4 bytes on 32 bit systens 8 on 64 bit
     Printchar = 0,
 
     /// ebx -> pointer
+    /// 
+    /// takes:
     /// 
     /// ecx -> lenght of string
     /// 
@@ -18,12 +25,16 @@ pub enum SysCalls{
 
     /// rust style println!
     /// 
+    /// takes:
+    /// 
     /// ebx -> pointer
     /// 
     /// ecx -> lenght of string
     Println,
 
     /// exits the progran
+    /// 
+    /// takes:
     /// 
     /// ebx -> statuscode
     /// 
@@ -32,13 +43,15 @@ pub enum SysCalls{
     
     /// takes number from ebx, converts to string, then writes data to stack 
     /// 
+    /// takes:
+    /// 
     /// ebx -> number
     ///
     /// ecx -> 0: unsigned 1: signed default: unsigned
     /// 
     /// edx -> 0: decimal 1: hex 2: binary 3: octal default: decimal
     /// 
-    /// return:
+    /// returns:
     /// 
     /// ebx -> pointer of string
     /// 
@@ -47,11 +60,13 @@ pub enum SysCalls{
 
     /// takes string pointer ebx, converts to int, returns value to eax 
     /// 
+    /// takes:
+    /// 
     /// ebx -> pointer
     /// 
     /// ecx -> lenght of string
     /// 
-    /// return:
+    /// returns:
     /// 
     /// ebx -> number
     StringToNum,
@@ -60,7 +75,7 @@ pub enum SysCalls{
     ///
     /// writes on stack
     /// 
-    /// return:
+    /// returns:
     /// 
     /// ebx -> pointer of str
     /// 
@@ -71,7 +86,7 @@ pub enum SysCalls{
     ///
     /// writes on stack
     /// 
-    /// return:
+    /// returns:
     /// 
     /// ebx -> pointer of str
     /// 
@@ -87,9 +102,22 @@ pub enum SysCalls{
     /// eax -> name to the fs
     /// 
     /// eg "./file.txt", "/home/user/data/file.txt"
+    /// 
+    /// ebx -> lenght of the path name
+    /// 
+    /// returns:
     ReadFs,
 
-
+    /// Writes data from stack to the given path
+    /// 
+    /// takes:
+    /// 
+    /// eax -> pointer of data
+    /// 
+    /// ebx -> lenght of data
+    /// 
+    /// ecx -> 
+    WriteFs,
 
 
 
