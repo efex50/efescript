@@ -80,6 +80,14 @@ pub enum SysCalls{
     /// edx -> line break u8 sign
     ReadCon,
 
+    /// Reads from file and writes to stack
+    /// 
+    /// takes:
+    /// 
+    /// eax -> name to the fs
+    /// 
+    /// eg "./file.txt", "/home/user/data/file.txt"
+    ReadFs,
 
 
 

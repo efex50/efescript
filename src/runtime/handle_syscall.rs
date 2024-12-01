@@ -4,7 +4,7 @@ use num_traits::FromPrimitive;
 
 use crate::{funs::as_usize, runtime::data_funs::NumToStr};
 
-use super::{ raylib_ex, reg, syscalls::SysCalls, EAX, EBX, ECX, EDX, ESP};
+use super::{ reg, syscalls::SysCalls, EAX, EBX, ECX, EDX, ESP};
 use efearena::Arena;
 
 pub(super)  fn handle_syscalls(stack:&mut Arena){
@@ -95,8 +95,10 @@ pub(super)  fn handle_syscalls(stack:&mut Arena){
             let str = stack.read(title, len);
 
             let str = String::from_utf8(str).unwrap();
-
-            raylib_ex::start(str);
+            todo!()
         },
+
+
+        SysCalls::ReadFs => todo!(),
     }
 }
