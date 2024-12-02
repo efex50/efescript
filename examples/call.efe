@@ -4,7 +4,7 @@ label _main
 
 mov ah, 20
 
-call _test
+call _test ; call the test
 
 
 mov eax, 3
@@ -18,7 +18,7 @@ syscall
 
 label _test
 
-ret
+ret ; shouldn't be able to syscall here
 mov eax, 3
 mov ebx, 1
 syscall

@@ -1,2 +1,4 @@
 target
 Cargo.lock
+str_to_hx/target
+str_to_hx/Cargo.lock
