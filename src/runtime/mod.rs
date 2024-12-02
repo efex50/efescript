@@ -52,8 +52,9 @@ impl ProgramRuntime{
 
         
 
-
         let lo = OperandType::from_u8(l).unwrap();
+        
+
         let l = SimpleOperands::from_operand(lo.clone());
         let op = match l {
             SimpleOperands::Reg => {
@@ -114,8 +115,7 @@ impl ProgramRuntime{
             OpCodes::And |
             OpCodes::Nand |
             OpCodes::Nor |
-            OpCodes::Cmp |
-            OpCodes::Test => {
+            OpCodes::Cmp  => {
                 *counter += 1;
                 //left
                 let lop = self.get_operand(counter).unwrap();
@@ -131,6 +131,7 @@ impl ProgramRuntime{
                 })        
 
             },
+            OpCodes::Test |
             OpCodes::Call |
             OpCodes::Push8 |
             OpCodes::Push16 |

@@ -1,0 +1,25 @@
+push32 0x2E2F6861
+push16 0x6861
+mov r1,esp 
+
+
+; loop start
+mov r2,1000
+mov r3,0 ; lenght
+
+label _loop
+
+;string
+push64 0x6D7573746FC3A70A
+add32 r3,8
+
+sub32 r2,1
+test r2
+jnz _loop
+
+mov eax,9
+mov ebx,r1
+mov ecx,r3
+mov edx,0
+syscall
+

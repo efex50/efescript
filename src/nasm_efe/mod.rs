@@ -14,13 +14,16 @@ pub(crate) enum PreCompile{
 }
 //
 //
+// bu nası ingilizce amk
 //
+// düzeldi btw bu arada 
 //
 // PROGRAM CANT HANDLE LABELS FROM DİFFERENT PLACESES
 // BECAUSE İT WİLL CHANGE THE LOCATİON OF THE LABEL 
 //
 //
-//
+// todo:
+// koca tabloları başka dosyaya taşı çok kalabalık yapıyo
 //
 //
 //
@@ -796,7 +799,10 @@ fn parse_opcode<S:Into<String>>(a:S) -> Option<OpCodes>{
         "POP16" | "Pop16" | "pop16" => Some(OpCodes::Pop16),
         "POP32" | "Pop32" | "pop32" => Some(OpCodes::Pop32),
         "POP64" | "Pop64" | "pop64" => Some(OpCodes::Pop64),
-        "SYSCALL" | "SysCall" | "syscall" | "Syscall" | "sysCall" => Some(OpCodes::SysCall),
+        // parser shit
+        // needs rewrite
+        // todo!
+        "SYSCAL" | "SysCal" | "syscal" | "Syscal" | "sysCal" => Some(OpCodes::SysCall),
         "CALL" | "Call" | "call" => Some(OpCodes::Call),
         "RET" | "Ret" | "ret" => Some(OpCodes::Ret),
 
@@ -879,7 +885,7 @@ fn parse_str_to_instructions(str:String) -> Vec<PreCompile> {
         buf.clear();
         let mut iter = x.bytes().into_iter().peekable();
         let opcode = loop{
-            if iter.peek().is_none() || iter.peek().is_some_and(|x| *x == b'/'){
+            if iter.peek().is_none() || iter.peek().is_some_and(|x| *x == b';'){
                 continue 'main;
             }
             let byte = iter.next().unwrap();
@@ -904,7 +910,7 @@ fn parse_str_to_instructions(str:String) -> Vec<PreCompile> {
                 break a;
             }
             // syscall
-            if byte == b';'{
+            if byte == b'l'{
                 let str = String::from_utf8(buf.clone()).unwrap();
                 let op = parse_opcode(str.trim());
                 
@@ -963,7 +969,7 @@ fn parse_str_to_instructions(str:String) -> Vec<PreCompile> {
 
 
         let operandl: Operands = loop {
-            let byte = iter.next(). unwrap();
+            let byte = iter.next().unwrap();
             
             
             if byte == b','{

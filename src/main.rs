@@ -1,6 +1,6 @@
 use std::env::args;
 
-use efescript::prelude::*;
+use efescript::{prelude::*, reg};
 
 
 
@@ -9,21 +9,22 @@ use efescript::prelude::*;
 fn main() 
 {   
     let args:Vec<String> = args().map(|d| d).collect();
-    if args.len() != 3 {
+    if args.len() < 2 {
         print_help();
         std::process::exit(1);
     }
+
     let f = &args[1];
     let mut p = ProgramRuntime::new();
-    
+
     let f = parse_from_file(f);
-    let path = std::path::Path::new("./a.efec");
-    
-    std :: fs :: write(path, f.clone()).unwrap();
-    let f = std::fs::read(path).unwrap()    ;
-    
     p.load_from_vec(f);
     p.start();
+    if let Some(x) = args.get(2) {
+        if x == "-d"{
+            println!("{:?}",p);
+        }
+    }
 }
 
 
@@ -62,12 +63,12 @@ mod tests{
 
 fn print_help(){
     println!(
-    "
+    r#"
     uygulamayı kullanmak için bir program seçin
 
     ör: efescript test.efe
     
     efe.c olmaz
-    "
+    "#
     )
 }

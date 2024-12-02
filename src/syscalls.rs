@@ -14,13 +14,14 @@ pub enum SysCalls{
     /// 4 bytes on 32 bit systens 8 on 64 bit
     Printchar = 0,
 
-    /// ebx -> pointer
+    /// rust style print!
     /// 
     /// takes:
     /// 
+    /// ebx -> pointer
+    /// 
     /// ecx -> lenght of string
     /// 
-    /// rust style print!
     Print,
 
     /// rust style println!
@@ -30,6 +31,7 @@ pub enum SysCalls{
     /// ebx -> pointer
     /// 
     /// ecx -> lenght of string
+    /// 
     Println,
 
     /// exits the progran
@@ -99,24 +101,32 @@ pub enum SysCalls{
     /// 
     /// takes:
     /// 
-    /// eax -> name to the fs
+    /// ebx -> pointer of the name to the fs
     /// 
     /// eg "./file.txt", "/home/user/data/file.txt"
     /// 
-    /// ebx -> lenght of the path name
+    /// ecx -> lenght of the path name
     /// 
     /// returns:
+    /// 
+    /// eax -> pointer of the returned data
+    /// 
+    /// the old esp - new esp is the len of data
     ReadFs,
 
     /// Writes data from stack to the given path
     /// 
     /// takes:
     /// 
-    /// eax -> pointer of data
+    /// ebx -> pointer of data
     /// 
-    /// ebx -> lenght of data
+    /// ecx -> lenght of data
     /// 
-    /// ecx -> 
+    /// edx -> pointer of the name to the fs
+    /// 
+    /// eg "./file.txt", "/home/user/data/file.txt"
+    /// 
+    /// r1 -> lenght of the path name
     WriteFs,
 
 
@@ -124,7 +134,7 @@ pub enum SysCalls{
 
 
     /// raylib helloworld
-    RaylibEx1 = 255,
+    RaylibEx1 = 2550,
 
 }
 

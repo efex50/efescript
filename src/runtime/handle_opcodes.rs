@@ -113,7 +113,7 @@ pub(super)  fn handle_opcodes(i:&Instuction,counter:&mut usize,stack:&mut Arena)
             let d = get_op_data(&i.operandl,stack) as u32;
             let d = d.to_be_bytes().to_vec();
             stack.write(reg!(ESP), d);
-            reg!(ESP = ESP+4);  
+            reg!(ESP = ESP+4);
         },
         OpCodes::Push64 => {
             let d = get_op_data(&i.operandl,stack) as u64;
@@ -247,7 +247,7 @@ pub(super)  fn handle_opcodes(i:&Instuction,counter:&mut usize,stack:&mut Arena)
 
         },
         OpCodes::Jnz    => {
-            if !reg!(EQUALS){
+            if !reg!(ZERO){
                 let addr = get_op_data(&i.operandl,stack);
                 *counter = addr;    
             }

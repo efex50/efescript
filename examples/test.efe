@@ -1,6 +1,6 @@
 
-mov QWORDPTR [ebp+0],0x68656c6c6f20776f
-mov DWORDPTR [ebp+8],0x726c6421
+mov QWORDPTR [ebp+0] ,0x68656c6c6f20776f
+mov DWORDPTR [ebp+8] ,0x726c6421
 mov QWORDPTR [ebp+12],0x73616C616D206475
 mov DWORDPTR [ebp+20],0x6E796121
 mov QWORDPTR [ebp+24],0x626972C59F657920 
@@ -9,8 +9,8 @@ mov QWORDPTR [ebp+40],0xC3B6796C656E6469
 mov DWORDPTR [ebp+48],0x203A2020
 mov esp,52
 
-mov e1,10
-cmp e1,11
+mov r1,10
+cmp r1,11
 jne _salam
 
 
@@ -36,18 +36,18 @@ syscall
 
 label _finish
 
-// bişey söyle
+; bişey söyle
 mov eax,1
 mov ebx,24
 mov ecx,15
 syscall
 
 
-// girdi oku
+; girdi oku
 mov eax,6
 syscall
 
-// girdinin pointerı ve uzunluğunu stacke kaydet
+; girdinin pointerı ve uzunluğunu stacke kaydet
 mov ebp,esp
 add32 esp,8
 mov DWORDPTR [ebp],ebx
