@@ -1,3 +1,4 @@
+use core::panic;
 use std::env::args;
 
 
@@ -10,24 +11,6 @@ enum KalanType {
 }
 
 
-macro_rules! as_be_bytes {
-    (usize $v:ident ) => {
-        {
-            let mut v:Vec<u8> = $v;
-            let mut vv = [0u8;8];
-            for x in 0..8{
-                let a = v.pop();
-                match a{
-                    Some(s) => {
-                        vv[7-x] = s;
-                    },
-                    None => break,
-                }
-            }
-            vv
-        }
-    };
-}
 macro_rules! as_le_bytes {
     (usize $v:ident ) => {
         {
@@ -52,7 +35,23 @@ macro_rules! as_le_bytes {
 
 fn main() {
     let args:Vec<String> = args().map(|d| d).collect();
-    let str = args[1].as_bytes();
+    if args.len() < 2 {
+        panic!("not enough args")
+    }
+
+    for x in 1..args.len(){
+        handle_part(args[x].clone());
+    }
+
+
+
+
+;
+
+}
+
+fn handle_part(arg:String){
+    let str = arg.as_bytes();
     // gelen stringi alıp 
     // push64 0xxxxxxxxxx gibi formatlayıcak
     // satır satır olucak
@@ -87,7 +86,6 @@ fn main() {
         
     };
 
-    println!("{:?}",parts);
     let mut out = Vec::new();
     for (x,y) in parts {
         let c = as_le_bytes!(usize y);
@@ -99,10 +97,13 @@ fn main() {
         };
         out.push(s);
     }
+    
+    println!("------\ninput str:{}\n",arg);
+
     for x in out {
         println!("{}",x);
     }
-    println!("total len is {}",len);
+    println!("\ntotal len is {}",len);
 
 }
 
