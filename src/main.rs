@@ -1,6 +1,6 @@
 use std::env::args;
 
-use efescript::{prelude::*, reg};
+use efescript::prelude::*;
 
 
 
@@ -8,6 +8,8 @@ use efescript::{prelude::*, reg};
 
 fn main() 
 {   
+
+
     let args:Vec<String> = args().map(|d| d).collect();
     if args.len() < 2 {
         print_help();

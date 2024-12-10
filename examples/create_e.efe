@@ -4,13 +4,14 @@ mov r1,esp
 
 
 ; loop start
-mov r2,1000
+mov r2,100
 mov r3,0 ; lenght
 
 label _loop
 
 ;string
-push64 0x6D7573746FC3A70A
+mov r4,0
+add32 r4,20
 add32 r3,8
 
 sub32 r2,1

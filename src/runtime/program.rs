@@ -7,24 +7,24 @@ use efearena::Arena;
 #[derive(Debug,Default)]
 pub struct PRegisters{
     /// accumulator     d:1
-    EAX:usize,
+    eax:usize,
     /// base            d:2
-    EBX:usize, 
+    ebx:usize, 
     /// counter         d:3
-    ECX:usize,
+    ecx:usize,
     /// data            d:4
-    EDX:usize,
+    edx:usize,
     /// stack base pointer     d:5 
-    EBP:usize,
+    ebp:usize,
     /// stack pointer           d:6
-    ESP:usize,
+    esp:usize,
     //other registers
-    R1:usize,
-    R2:usize,
-    R3:usize,
-    R4:usize,
-    R5:usize,
-    R6:usize,
+    r1:usize,
+    r2:usize,
+    r3:usize,
+    r4:usize,
+    r5:usize,
+    r6:usize,
     
     flags:PFlags,
 
@@ -32,14 +32,14 @@ pub struct PRegisters{
 
 #[derive(Debug,Default)]
 pub struct PFlags{
-    CARRY    :bool,
-    EQUALS   :bool,
-    BIGGER   :bool,
-    SMALLER  :bool,
-    BIGGEREQ :bool,
-    SMALLEREQ:bool,
-    ZERO     :bool,
-    NEGATIVE :bool,
+    carry    :bool,
+    equals   :bool,
+    bigger   :bool,
+    smaller  :bool,
+    biggereq :bool,
+    smallereq:bool,
+    zero     :bool,
+    negative :bool,
 }
 
 

@@ -6,6 +6,7 @@ pub(crate)mod funs;
 pub(crate)mod syscalls;
 pub mod nasm_efe;
 pub(crate)mod runtime;
+pub mod compiler;
 
 
 

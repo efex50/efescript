@@ -94,7 +94,7 @@ pub(super)  fn handle_syscalls(stack:&mut Arena){
             let len = reg!(ECX);
             let str = stack.read(title, len);
 
-            let str = String::from_utf8(str).unwrap();
+            let _str = String::from_utf8(str).unwrap();
             todo!()
         },
 
@@ -123,6 +123,19 @@ pub(super)  fn handle_syscalls(stack:&mut Arena){
             };
             let pth = std::path::Path::new(&pstr);
             std::fs::write(pth, to_write).unwrap();
+        },
+        SysCalls::HeapAlloc => {
+            panic!("TODO! creates pages untill finds the end page");
+            let size = reg!(EBX);
+            if size == 0{
+                panic!("Heap size cannot be zero");
+            }else {
+                let pointer = usize::MAX - size;
+                let a = vec![0,0];
+                dbg!("sa");
+                stack.write(pointer, a);
+                reg!(EBX = pointer);
+            }
         },
     }
 }

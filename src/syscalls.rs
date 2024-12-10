@@ -129,7 +129,16 @@ pub enum SysCalls{
     /// r1 -> lenght of the path name
     WriteFs,
 
-
+    /// Heap alloc
+    /// 
+    /// takes:
+    ///
+    /// ebx -> size
+    ///  
+    /// returns:
+    /// 
+    /// ebx -> pointer
+    HeapAlloc,
 
 
 
