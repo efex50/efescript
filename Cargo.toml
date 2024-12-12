@@ -8,7 +8,7 @@ members = ["efepages"]
 
 
 [dependencies]
-efepages = { git="https://github.com/efex50/efepages/" }
+efepages = { path="efepages" }
 num-derive = "0.4.2"
 num-traits = "0.2.19"
 text_io = "0.1.12"
