@@ -2,9 +2,10 @@
 /// Kullanımı:
 /// 
 /// ```
+/// static EAX = 0;
 /// reg!(EAX) // EAX isimli u32 değerini getirir
 /// 
-/// reg!(EAX = 4235) // EAX isimli register'a verilen sayıyı yazar   
+/// reg!(EAX = 4235); // EAX isimli register'a verilen sayıyı yazar   
 /// ```
 #[macro_export]
 macro_rules! reg {
