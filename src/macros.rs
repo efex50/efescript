@@ -2,8 +2,8 @@
 /// Kullanımı:
 /// 
 /// ```
-/// use efescript::reg
-/// static EAX:usize = 0;
+/// use efescript::reg;
+/// static mut EAX:usize = 0;
 /// reg!(EAX); // EAX isimli u32 değerini getirir
 /// 
 /// reg!(EAX = 4235); // EAX isimli register'a verilen sayıyı yazar   
