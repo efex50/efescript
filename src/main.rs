@@ -23,8 +23,10 @@ fn main()
     p.load_from_vec(f);
     p.start();
     if let Some(x) = args.get(2) {
-        if x == "-d"{
-            println!("{:?}",p);
+        match x.as_str(){
+            "-d" => println!("{:?}",p),
+            "-r" => println!("ram usage :{:?} bytes",p.stack.page.len() * efepages::vars::PAGE_SIZE ),
+            _=>()
         }
     }
 }

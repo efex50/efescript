@@ -1,12 +1,15 @@
 pub(super)  mod handle_syscall;
 pub(super)  mod handle_opcodes;
 pub(super)  mod data_funs;
+
+// todo
+#[allow(dead_code)]
 pub(super)  mod program;
 
 use crate::*;
 
-use efearena::Arena;
 use data_funs::get_inner_ptr;
+use efepages::page::Page;
 use nasm_efe::{parse_register_type_to_op, Instuction, OperandType, Operands, SimpleOperands,};
 use num_traits::FromPrimitive;
 use ops::OpCodes;
@@ -15,14 +18,14 @@ use ops::OpCodes;
 
 #[derive(Debug)]
 pub struct ProgramRuntime{
-    pub program:Arena,
-    pub stack:Arena,
+    pub program:Page,
+    pub stack:Page,
 }
 impl ProgramRuntime{
     pub fn new() -> Self{
         Self{
-            program:Arena::new(),
-            stack:Arena::new()
+            program:Page::default(),
+            stack:Page::default()
         }
     }
     pub fn load_from_file<S:Into<String>>(&mut self,a:S){

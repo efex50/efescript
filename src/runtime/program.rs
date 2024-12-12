@@ -1,5 +1,4 @@
-use efearena::Arena;
-
+use efepages::page::Page;
 
 
 
@@ -49,7 +48,7 @@ pub struct PFlags{
 
 #[derive(Debug)]
 pub struct ProgramRuntime{
-    pub program:Arena,
-    pub stack:Arena,
+    pub program:Page,
+    pub stack:Page,
     pub registers:PRegisters
 }

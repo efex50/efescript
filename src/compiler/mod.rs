@@ -2,6 +2,8 @@
 
 
 
+pub mod ast;
+
 struct Ast{
 
 }

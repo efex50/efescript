@@ -1,7 +1,7 @@
 use num_traits::FromPrimitive;
 
 use super::{ as_be_bytes, nasm_efe::{OperandType, Operands, PtrInner, Registers, SimpleOperands}, reg, R1, R2, R3, R4, R5, R6, EAX, EBP, EBX, ECX, EDX, ESP};
-use efearena::Arena;
+use efepages::page::Page;
 
 pub enum NumToStr{
     I(isize),
@@ -9,7 +9,7 @@ pub enum NumToStr{
 }
 
 
-pub(super)  fn write_op_data(a:&Operands,r:usize,stack:&mut Arena){
+pub(super)  fn write_op_data(a:&Operands,r:usize,stack:&mut Page){
     match a {
         Operands::EAX => reg!(EAX = r),
         Operands::EBX => reg!(EBX = r),
@@ -119,7 +119,7 @@ pub(super)  fn write_op_data(a:&Operands,r:usize,stack:&mut Arena){
 }
 
 
-pub(super) fn get_op_data(a:&Operands,stack:&mut Arena) -> usize{
+pub(super) fn get_op_data(a:&Operands,stack:&mut Page) -> usize{
     match a {
         Operands::Static(s) => *s,
         Operands::String(_vec) => todo!(),
@@ -276,7 +276,7 @@ enum InnerTypes{
 }
 
 
-pub(super) fn get_inner_ptr(start:&mut usize,program:&mut Arena) -> Operands{
+pub(super) fn get_inner_ptr(start:&mut usize,program:&mut Page) -> Operands{
     
     
     

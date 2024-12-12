@@ -1,11 +1,11 @@
+use efepages::page::Page;
 use num_traits::Zero;
 
 use crate::{flags::{BIGGER, BIGGEREQ, EQUALS, NEGATIVE, SMALLER, SMALLEREQ, ZERO}, funs::reset_flags, ESP};
 
 use super::{ data_funs::{get_op_data, write_op_data}, handle_syscall, nasm_efe::Instuction, ops::OpCodes, reg};
-use efearena::Arena;
 
-pub(super)  fn handle_opcodes(i:&Instuction,counter:&mut usize,stack:&mut Arena){
+pub(super)  fn handle_opcodes(i:&Instuction,counter:&mut usize,stack:&mut Page){
     match i.opcode {
         OpCodes::Mov => {
             let r = get_op_data(&i.operandr,stack);
