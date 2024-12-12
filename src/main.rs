@@ -33,37 +33,6 @@ fn main()
 
 
 
-#[cfg(test)]
-mod tests{
-    use std::io::BufRead;
-
-
-    #[test]
-    fn test_str_endian(){
-        let a = "dkkşfmas asş fmasşf mas3131".to_string();
-        let _v = a.bytes().map(|a| a).collect::<Vec<u8>>();
-    }
-
-    #[test]
-    fn test_split(){
-        let d = "safafi lasfasf+ asfasfas".to_string();
-        let sp:Vec<&str> = d.split("+").collect();
-        if sp.len() >1{}
-        println!("{:?}",sp);
-    }
-
-
-    #[test]
-    fn test_bytes(){
-    let mut a = Vec::new();
-    std::io::stdin().lock().read_until(b'i', &mut  a).unwrap();
-    let str = String::from_utf8(a).unwrap();
-    println!("str : {}",str); 
-
-    }
-}
-
-
 
 fn print_help(){
     println!(
@@ -73,6 +42,10 @@ fn print_help(){
     ör: efescript test.efe
     
     efe.c olmaz
+    
+    -d // programın debug çıktısını gösterir
+    -r // programın kullandığı hafızayı byte cinsinden gösterir
+
     "#
     )
 }
