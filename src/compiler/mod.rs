@@ -1,12 +1,7 @@
-
-
-
-
 pub mod ast;
 
-struct Ast{
 
-}
+
 
 enum AstObjects{}
 

@@ -10,6 +10,8 @@ pub mod compiler;
 
 
 
+proc_macros::max_addr!();
+
 
 
 /// accumulator     d:1

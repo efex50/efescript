@@ -1,14 +1,10 @@
 use std::env::args;
-
 use efescript::prelude::*;
-
-
 
 
 
 fn main() 
 {   
-
 
     let args:Vec<String> = args().map(|d| d).collect();
     if args.len() < 2 {

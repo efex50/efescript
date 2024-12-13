@@ -125,7 +125,7 @@ pub(super)  fn handle_syscalls(stack:&mut Page){
             std::fs::write(pth, to_write).unwrap();
         },
         SysCalls::HeapAlloc => {
-            panic!("TODO! creates pages untill finds the end page");
+            todo!("TODO! creates pages untill finds the end page");
             let size = reg!(EBX);
             if size == 0{
                 panic!("Heap size cannot be zero");

@@ -2,3 +2,5 @@ target
 Cargo.lock
 str_to_hx/target
 str_to_hx/Cargo.lock
+proc_macros/target
+proc_macros/Cargo.lock
