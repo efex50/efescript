@@ -1,7 +1,6 @@
 
 
 
-
 pub fn as_usize<S:Into<String>>(a:S) -> Option<usize>{
     let a:String = a.into();
     let num :Result<usize, std::num::ParseIntError>;
@@ -21,10 +20,11 @@ pub fn as_usize<S:Into<String>>(a:S) -> Option<usize>{
         num = usize::from_str_radix(&a, 10);
     };
     num
-        .map(|a|Some(a))
-        .unwrap_or(None)
-
+    .map(|a|Some(a))
+    .unwrap_or(None)
+    
 }
+#[allow(unused)]
 pub fn as_u8<S:Into<String>>(a:S) -> Option<u8>{
     let a:String = a.into();
     let num :Result<u8, std::num::ParseIntError>;
@@ -48,6 +48,7 @@ pub fn as_u8<S:Into<String>>(a:S) -> Option<u8>{
         .unwrap_or(None)
 
 }
+#[allow(unused)]
 pub fn as_u16<S:Into<String>>(a:S) -> Option<u16>{
     let a:String = a.into();
     let num :Result<u16, std::num::ParseIntError>;
@@ -71,6 +72,7 @@ pub fn as_u16<S:Into<String>>(a:S) -> Option<u16>{
         .unwrap_or(None)
 
 }
+#[allow(unused)]
 pub fn as_u32<S:Into<String>>(a:S) -> Option<u32>{
     let a:String = a.into();
     let num :Result<u32, std::num::ParseIntError>;
@@ -94,6 +96,7 @@ pub fn as_u32<S:Into<String>>(a:S) -> Option<u32>{
         .unwrap_or(None)
 
 }
+#[allow(unused)]
 pub fn as_u64<S:Into<String>>(a:S) -> Option<u64>{
     let a:String = a.into();
     let num :Result<u64, std::num::ParseIntError>;
@@ -143,16 +146,3 @@ pub fn get_db_data(a:&mut impl Iterator<Item = u8>){
     println!("{}",str);
 }
 
-
-
-use crate::{flags::*, reg};
-pub fn reset_flags(){
-    reg!(CARRY     = false);
-    reg!(EQUALS     = false);
-    reg!(BIGGER    = false);
-    reg!(SMALLER   = false);
-    reg!(BIGGEREQ  = false);
-    reg!(SMALLEREQ     = false);
-    reg!(ZERO     = false);
-    reg!(NEGATIVE    = false);
-}

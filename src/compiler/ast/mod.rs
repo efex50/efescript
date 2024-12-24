@@ -1,9 +1,9 @@
 pub(super) struct Ast{
-    pub head:Head,
+    pub head:Header,
     pub body:Body,    
 }
 
-pub(super) struct  Head{
+pub(super) struct  Header{
 
 }
 

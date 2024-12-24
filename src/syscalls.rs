@@ -33,15 +33,6 @@ pub enum SysCalls{
     /// ecx -> lenght of string
     /// 
     Println,
-
-    /// exits the progran
-    /// 
-    /// takes:
-    /// 
-    /// ebx -> statuscode
-    /// 
-    /// 0 = succes 1 = fail
-    Finish, 
     
     /// takes number from ebx, converts to string, then writes data to stack 
     /// 
@@ -140,6 +131,22 @@ pub enum SysCalls{
     /// ebx -> pointer
     HeapAlloc,
 
+    /// Writes to the stdout
+    /// 
+    Write,
+
+    ///
+    /// 
+    Flush,
+
+    /// exits the progran
+    /// 
+    /// takes:
+    /// 
+    /// ebx -> statuscode
+    /// 
+    /// 0 = succes 1 = fail
+    Finish = 5050, 
 
 
     /// raylib helloworld

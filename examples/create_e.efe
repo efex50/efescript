@@ -1,10 +1,11 @@
+mov r6, esp
 push32 0x2E2F6861
 push16 0x6861
 mov r1,esp 
-
+sub32 r1,r6
 
 ; loop start
-mov r2,1000000
+mov r2,100
 mov r3,0 ; lenght
 
 label _loop
@@ -17,8 +18,14 @@ sub32 r2,1
 test r2
 jnz _loop
 
-mov eax,9
+mov eax,8
 mov ebx,r1
 mov ecx,r3
-mov edx,0
+mov edx,r6
+syscall
+
+
+
+mov eax, 5050
+mov ebx, 0
 syscall
