@@ -1,10 +1,10 @@
-pub mod runtime;
 pub mod init;
-mod syscall;
-pub mod opcode;
+pub mod thread;
+mod runtime;
 
 
 use efepages::page::Page;
+use thread::PThread;
 
 
 
@@ -36,14 +36,15 @@ pub struct PRegisters{
 
 #[derive(Debug,Default)]
 pub struct PFlags{
-    carry    :bool,
-    equals   :bool,
-    greater   :bool,
-    lesser  :bool,
-    greatereq :bool,
-    lessereq:bool,
-    zero     :bool,
-    negative :bool,
+    carry       :bool,
+    equals      :bool,
+    greater     :bool,
+    lesser      :bool,
+    greatereq   :bool,
+    lessereq    :bool,
+    zero        :bool,
+    negative    :bool,
+    sign        :bool,
 }
 impl PFlags {
     pub fn reset(&mut self){
@@ -59,9 +60,10 @@ impl PFlags {
 pub struct ProgramRuntime{
     pub counter:usize,
     pub program:Page,
-    pub registers:PRegisters,
-    pub flags:PFlags,
+    pub program_size:usize,
+    pub threads:Vec<PThread>,
     pub stdin:Vec<u8>,
+    pub stderr:Vec<u8>,
     pub stdout:Vec<u8>,
 
 }

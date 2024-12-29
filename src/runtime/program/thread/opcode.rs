@@ -1,12 +1,17 @@
 use num_traits::Zero;
 
 use crate::{ops::OpCodes, runtime::Instuction};
-mod opcode_funs;
-use super::ProgramRuntime;
+use super::PThread;
 
-impl ProgramRuntime{
+impl PThread{
     
 pub(super) fn handle_opcodes(&mut self,i:&Instuction){
+
+    let prg = unsafe {
+        &mut *self.program
+    };
+
+    
     match i.opcode {
         OpCodes::Mov => {
             let r = self.get_op_data(&i.operandr);
@@ -102,47 +107,47 @@ pub(super) fn handle_opcodes(&mut self,i:&Instuction){
         },
         OpCodes::Push8 => {
             let d = self.get_op_data(&i.operandl);
-            self.program.write(self.registers.esp, vec![d as u8]);
+            prg.write(self.registers.esp, vec![d as u8]);
             self.registers.esp += 1;
         },
         OpCodes::Push16 => {
             let d = self.get_op_data(&i.operandl) as u16;
             let d = d.to_be_bytes().to_vec();
-            self.program.write(self.registers.esp, d);
+            prg.write(self.registers.esp, d);
             self.registers.esp += 2;
         },
         OpCodes::Push32 => {
             let d = self.get_op_data(&i.operandl) as u32;
             let d = d.to_be_bytes().to_vec();
-            self.program.write(self.registers.esp, d);
+            prg.write(self.registers.esp, d);
             self.registers.esp += 4;
         },
         OpCodes::Push64 => {
             let d = self.get_op_data(&i.operandl) as u64;
             let d = d.to_be_bytes().to_vec();
-            self.program.write(self.registers.esp, d);
+            prg.write(self.registers.esp, d);
             self.registers.esp += 8;
         },
         OpCodes::Pop8 => {
-            let d = self.program.read(self.registers.esp -1, 1);
+            let d = prg.read(self.registers.esp -1, 1);
             let d = u8::from_be_bytes(d.try_into().unwrap());
             self.registers.esp -= 1;
             self.write_op_data(&i.operandl, d as usize);
         },
         OpCodes::Pop16 => {
-            let d = self.program.read(self.registers.esp -2, 2);
+            let d = prg.read(self.registers.esp -2, 2);
             let d = u16::from_be_bytes(d.try_into().unwrap());
             self.registers.esp -= 2;
             self.write_op_data(&i.operandl, d as usize);
         },
         OpCodes::Pop32 => {
-            let d = self.program.read(self.registers.esp -4, 4);
+            let d = prg.read(self.registers.esp -4, 4);
             let d = u32::from_be_bytes(d.try_into().unwrap());
             self.registers.esp -= 4;
             self.write_op_data(&i.operandl, d as usize);
         },
         OpCodes::Pop64 => {
-            let d = self.program.read(self.registers.esp -8, 8);
+            let d = prg.read(self.registers.esp -8, 8);
             let d = u64::from_be_bytes(d.try_into().unwrap());
             self.registers.esp -= 8;
             self.write_op_data(&i.operandl, d as usize);
@@ -179,7 +184,7 @@ pub(super) fn handle_opcodes(&mut self,i:&Instuction){
             let d = self.counter;
             let d = d.to_be_bytes().to_vec();
             let len = d.len();
-            self.program.write(self.registers.esp, d);
+            prg.write(self.registers.esp, d);
             self.registers.esp += len;
             self.counter = addr;
         },
@@ -189,7 +194,7 @@ pub(super) fn handle_opcodes(&mut self,i:&Instuction){
             let len = self.counter;
             let len = len.to_be_bytes().to_vec().len();
 
-            let d = self.program.read(self.registers.esp - len, len);
+            let d = prg.read(self.registers.esp - len, len);
             let d = usize::from_be_bytes(d.try_into().unwrap());
             self.registers.esp -= len;
             self.counter = d;

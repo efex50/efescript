@@ -1,9 +1,11 @@
 use efepages::page::Page;
 use num_traits::FromPrimitive;
 
-use crate::{as_be_bytes, nasm_efe::{PtrInner, Registers}, prelude::ProgramRuntime, runtime::{program::PRegisters, OperandType, Operands, SimpleOperands}};
+use crate::{as_be_bytes, instruction::{Operands, PtrInner, Registers}, runtime::{program::PRegisters, OperandType, SimpleOperands}};
 
-impl ProgramRuntime {
+use super::PThread;
+
+impl PThread {
     pub(super) fn get_op_data(&mut self,a: &Operands) -> usize{
 
         match a {
@@ -57,24 +59,36 @@ impl ProgramRuntime {
     
             Operands::BYTEPTR(ptr_inner) =>  {
                 let p = get_pointer_inner_addr(ptr_inner,&self.registers);
-                let a = self.program.read(p, 1)[0];
+                let prg = unsafe {
+                    &*self.program
+                };
+                let a = prg.read(p, 1)[0];
                 a as usize
             },
             Operands::WORDPTR(ptr_inner) =>  {
                 let p = get_pointer_inner_addr(ptr_inner,&self.registers);
-                let v = self.program.read(p, 2).try_into().unwrap();
+                let prg = unsafe {
+                    &*self.program
+                };
+                let v = prg.read(p, 2).try_into().unwrap();
                 let a = u16::from_be_bytes(v);
                 a as usize
             },
             Operands::DWORDPTR(ptr_inner) => {
                 let p = get_pointer_inner_addr(ptr_inner,&self.registers);
-                let v = self.program.read(p, 4).try_into().unwrap();
+                let prg = unsafe {
+                    &*self.program
+                };
+                let v = prg.read(p, 4).try_into().unwrap();
                 let a = u32::from_be_bytes(v);
                 a as usize
             },
             Operands::QWORDPTR(ptr_inner) => {
                 let p = get_pointer_inner_addr(ptr_inner,&self.registers);
-                let v = self.program.read(p, 8).try_into().unwrap();
+                let prg = unsafe {
+                    &*self.program
+                };
+                let v = prg.read(p, 8).try_into().unwrap();
                 let a = u64::from_be_bytes(v);
                 a as usize
             },
@@ -107,24 +121,36 @@ impl ProgramRuntime {
                 let addr = get_pointer_inner_addr(ptr_inner,&self.registers);
 
                 let v: [u8; 1] = (r as u8).to_be_bytes();
-                self.program.write(addr, v.to_vec());
+                let prg = unsafe {
+                    &mut *self.program
+                };
+                prg.write(addr, v.to_vec());
             },
             Operands::WORDPTR(ptr_inner) => {
                 let addr = get_pointer_inner_addr(ptr_inner,&self.registers);
                 let v: [u8; 2] = (r as u16).to_be_bytes();
-                self.program.write(addr, v.to_vec());
+                let prg = unsafe {
+                    &mut *self.program
+                };
+                prg.write(addr, v.to_vec());
             },
             Operands::DWORDPTR(ptr_inner) => {
                 let addr = get_pointer_inner_addr(ptr_inner,&self.registers);
 
                 let v: [u8; 4] = (r as u32).to_be_bytes();
-                self.program.write(addr, v.to_vec());
+                let prg = unsafe {
+                    &mut *self.program
+                };
+                prg.write(addr, v.to_vec());
             },
             Operands::QWORDPTR(ptr_inner) => {
                 let addr = get_pointer_inner_addr(ptr_inner,&self.registers);
 
                 let v: [u8; 8] = (r as u64).to_be_bytes();
-                self.program.write(addr, v.to_vec());
+                let prg = unsafe {
+                    &mut *self.program
+                };
+                prg.write(addr, v.to_vec());
             },
             Operands::Null => todo!(),
             Operands::AL => {
@@ -198,7 +224,6 @@ impl ProgramRuntime {
         }
         
     }
-    
 
 }
 

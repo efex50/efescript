@@ -16,8 +16,10 @@ fn main()
     let mut p = ProgramRuntime::new();
 
     let f = parse_from_file(f);
+    std::fs::write(std::path::Path::new("./out.efec"), &f).unwrap();
     p.load_from_vec(f);
-    p.start();
+    dbg!(&p.counter);
+    p.run_all_nonstop();
     if let Some(x) = args.get(2) {
         match x.as_str(){
             "-d" => println!("{:?}",p),
@@ -45,6 +47,33 @@ fn print_help(){
     "#
     )
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

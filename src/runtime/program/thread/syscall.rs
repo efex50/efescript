@@ -4,11 +4,18 @@ use num_traits::FromPrimitive;
 
 use crate::{funs::as_usize, runtime::data_funs::NumToStr, syscalls::SysCalls};
 
-use super::ProgramRuntime;
+use super::PThread;
 
-impl ProgramRuntime{
+impl PThread{
     
     pub(super)  fn handle_syscalls(&mut self){
+
+        let prg = unsafe {
+            &mut *self.program
+        };
+    
+    
+
         let syscall = SysCalls::from_usize(self.registers.eax).unwrap();
         match syscall {
             SysCalls::Printchar => {
@@ -18,14 +25,14 @@ impl ProgramRuntime{
             SysCalls::Print => {
                 let start = self.registers.ebx;
                 let len = self.registers.ecx;
-                let str = self.program.read(start, len);
+                let str = prg.read(start, len);
                 let str = String::from_utf8(str).unwrap();
                 print!("{} ",str);
             },
             SysCalls::Println => {
                 let start = self.registers.ebx;
                 let len = self.registers.ecx;
-                let str = self.program.read(start, len);
+                let str = prg.read(start, len);
                 let str = String::from_utf8(str).unwrap();
                 println!("{}",str);
             },
@@ -51,13 +58,13 @@ impl ProgramRuntime{
                 let len = s.len();
                 self.registers.ecx = len;
                 self.registers.ebx = self.registers.esp;
-                self.program.write(self.registers.esp, s);
+                prg.write(self.registers.esp, s);
                 self.registers.esp += len;
             },
             SysCalls::StringToNum => {
                 let ptr = self.registers.ebx;
                 let len = self.registers.ecx;
-                let str = self.program.read(ptr, len) ;//info_program!(asv STACK ptr,len);
+                let str = prg.read(ptr, len) ;//info_program!(asv STACK ptr,len);
                 let str = String::from_utf8(str).unwrap();
                 let num = as_usize(str).unwrap();
                 self.registers.eax = num;
@@ -72,7 +79,7 @@ impl ProgramRuntime{
                 self.registers.ebx = self.registers.esp;
                 self.registers.ecx = str.len();
                 let s:Vec<u8> = str.as_bytes().iter().map(|a| *a).collect();
-                self.program.write(self.registers.esp, s);
+                prg.write(self.registers.esp, s);
                 self.registers.esp += str.len();
             },
             SysCalls::ReadCon => {
@@ -86,13 +93,13 @@ impl ProgramRuntime{
                 self.registers.ebx = self.registers.esp;
                 self.registers.ecx = str.len();
                 let s:Vec<u8> = str.as_bytes().iter().map(|a| *a).collect();
-                self.program.write(self.registers.esp, s);
+                prg.write(self.registers.esp, s);
                 self.registers.esp += str.len();
             },
             SysCalls::RaylibEx1 => {
                 let title = self.registers.ebx;
                 let len = self.registers.ecx;
-                let str = self.program.read(title, len);
+                let str = prg.read(title, len);
 
                 let _str = String::from_utf8(str).unwrap();
                 todo!("raylib not implemented")
@@ -102,22 +109,22 @@ impl ProgramRuntime{
             SysCalls::ReadFs => {
                 let p = self.registers.ebx;
                 let len = self.registers.ecx;
-                let bytes = self.program.read(p, len);
+                let bytes = prg.read(p, len);
                 let pstr = String::from_utf8(bytes).unwrap();
                 let pth = std::path::Path::new(&pstr);
                 let d = std::fs::read(pth).unwrap();
                 let len = d.len();
                 let esp = self.registers.esp;
-                self.program.write(esp, d);
+                prg.write(esp, d);
                 self.registers.esp += len;
             },
             SysCalls::WriteFs => {
                 let (p,pl) = (self.registers.ebx,self.registers.ecx);
-                let to_write = self.program.read(p, pl);
+                let to_write = prg.read(p, pl);
                 // get path string
                 let pstr = {
                     let (t,tl) = (self.registers.edx,self.registers.r1);
-                    let bytes = self.program.read(t, tl);
+                    let bytes = prg.read(t, tl);
                     let pstr = String::from_utf8(bytes).unwrap();
                     pstr
                 };
@@ -133,7 +140,7 @@ impl ProgramRuntime{
                     let pointer = usize::MAX - size;
                     let a = vec![0,0];
                     dbg!("sa");
-                    self.program.write(pointer, a);
+                    prg.write(pointer, a);
                     self.registers.ebx = pointer;
                 }
             },

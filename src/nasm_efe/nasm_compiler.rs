@@ -2,9 +2,10 @@ use std::collections::HashMap;
 
 use num_traits::ToPrimitive;
 
-use crate::{funs::trim_zeroes, ops::OpCodes};
+use crate::{funs::trim_zeroes, instruction::Instuction, ops::OpCodes};
 
-use super::{Instuction, PreCompile};
+use super::PreCompile;
+
 
 
 #[derive(Debug,)]
@@ -31,7 +32,7 @@ pub struct Data{
     labels:HashMap<String,usize>
 }
 impl Data{
-    pub fn from_pre_compile(a:Vec<PreCompile>) -> Self{
+    pub(crate)  fn from_pre_compile(a:Vec<PreCompile>) -> Self{
         let mut v: Vec<Objects> = Vec::new();
         let mut labels = HashMap::new();
         for x in a{

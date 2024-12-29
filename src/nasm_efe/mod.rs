@@ -3,7 +3,7 @@
 use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::ToPrimitive;
 
-use crate::{funs::{as_usize, get_db_data, trim_zeroes}, ops::OpCodes};
+use crate::{funs::{as_usize, get_db_data, trim_zeroes}, instruction::{Instuction, Operands, PtrInner, Registers}, ops::OpCodes};
 pub mod nasm_compiler;
 
 #[derive(Debug)]
@@ -28,118 +28,6 @@ pub(crate) enum PreCompile{
 //
 
 
-#[derive(Debug)]
-pub(crate) struct Instuction{
-    pub opcode:OpCodes,
-    pub operandl:Operands,
-    pub operandr:Operands,
-}
-impl Instuction {
-    
-    pub fn get_len(&self) -> usize {
-        let mut len = 1 ;
-        if self.operandl != Operands::Null{
-            let b = self.operandl.to_int();
-            len += b.len();
-        }
-        if self.operandr != Operands::Null{
-            let b = self.operandr.to_int();
-            len += b.len();
-        }
-        len
-    }
-    pub fn get_program(&self) -> Vec<u8> {
-        let mut v = Vec::new() ;
-        v.push(self.opcode.to_u8().unwrap());
-        if self.operandl != Operands::Null{
-            let mut b = self.operandl.to_int();
-            v.append(&mut b);
-        }
-        if self.operandr != Operands::Null{
-            let mut b = self.operandr.to_int();
-            v.append(&mut b);            
-        }
-        v
-    }
-}
-
-#[derive(Debug,PartialEq)]
-pub(crate) enum SimpleOperands{
-    Reg,
-    PushPop,
-    Static,
-    String,
-    Ptr,
-    Nop
-}
-impl SimpleOperands {
-    pub fn from_operand(a:OperandType) -> Self{
-        match a {
-            OperandType::Static => Self::Static,
-            OperandType::EAX |
-            OperandType::EBX |
-            OperandType::ECX |
-            OperandType::EDX |
-            OperandType::EBP |
-            OperandType::ESP |
-            OperandType::R1 |
-            OperandType::R2 |
-            OperandType::R3 |
-            OperandType::R4 |
-            OperandType::R5 |
-            OperandType::R6 |
-            OperandType::AL |
-            OperandType::AH |
-            OperandType::BL |
-            OperandType::BH |
-            OperandType::CL |
-            OperandType::CH |
-            OperandType::DL |
-            OperandType::DH => Self::Reg,
-
-            OperandType::Pointer | 
-            OperandType::BYTEPTR |
-            OperandType::WORDPTR |
-            OperandType::DWORDPTR |
-            OperandType::QWORDPTR => Self::Ptr,
-            OperandType::String => Self::String,
-            OperandType::NOP => Self::Nop,
-        }
-    }
-}
-
-#[derive(Debug, PartialEq, Eq)]
-pub(crate) enum Operands{
-    Static(usize),
-    String(Vec<u8>),
-    Label(String),
-    EAX,
-    EBX,
-    ECX,
-    EDX,
-    EBP,
-    ESP,
-    R1,
-    R2,
-    R3,
-    R4,
-    R5,
-    R6,
-    AL,
-    AH,
-    BL,
-    BH,
-    CL,
-    CH,
-    DL,
-    DH,
-    Pointer(PtrInner),
-    BYTEPTR (PtrInner),
-    WORDPTR (PtrInner),
-    DWORDPTR(PtrInner),
-    QWORDPTR(PtrInner),
-    Null,
-}
 impl Operands{
     fn to_int(&self) -> Vec<u8>{
         match self {
@@ -169,14 +57,14 @@ impl Operands{
             Operands::R4  => vec![OperandType::R4.to_u8().unwrap()],
             Operands::R5  => vec![OperandType::R5.to_u8().unwrap()],
             Operands::R6  => vec![OperandType::R6.to_u8().unwrap()],
-            Operands::AL => vec![OperandType::AL.to_u8().unwrap()],
-            Operands::AH => vec![OperandType::AH.to_u8().unwrap()],
-            Operands::BL => vec![OperandType::BL.to_u8().unwrap()],
-            Operands::BH => vec![OperandType::BH.to_u8().unwrap()],
-            Operands::CL => vec![OperandType::CL.to_u8().unwrap()],
-            Operands::CH => vec![OperandType::CH.to_u8().unwrap()],
-            Operands::DL => vec![OperandType::DL.to_u8().unwrap()],
-            Operands::DH => vec![OperandType::DH.to_u8().unwrap()],
+            Operands::AL  => vec![OperandType::AL.to_u8().unwrap()],
+            Operands::AH  => vec![OperandType::AH.to_u8().unwrap()],
+            Operands::BL  => vec![OperandType::BL.to_u8().unwrap()],
+            Operands::BH  => vec![OperandType::BH.to_u8().unwrap()],
+            Operands::CL  => vec![OperandType::CL.to_u8().unwrap()],
+            Operands::CH  => vec![OperandType::CH.to_u8().unwrap()],
+            Operands::DL  => vec![OperandType::DL.to_u8().unwrap()],
+            Operands::DH  => vec![OperandType::DH.to_u8().unwrap()],
 
             Operands::Pointer(a) =>{
                 let mut v = vec![OperandType::Pointer.to_u8().unwrap()];
@@ -478,16 +366,87 @@ impl Operands{
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
-pub(crate) enum PtrInner{
-    Static(usize),
-    Reg(Registers),
-    Sum(Registers,usize),
-    Ext(Registers,usize),
-    Extr(usize,Registers),
-    SumReg(Registers,Registers),
-    ExtReg(Registers,Registers),
+
+
+impl Instuction {
+    
+    pub fn get_len(&self) -> usize {
+        let mut len = 1 ;
+        if self.operandl != Operands::Null{
+            let b = self.operandl.to_int();
+            len += b.len();
+        }
+        if self.operandr != Operands::Null{
+            let b = self.operandr.to_int();
+            len += b.len();
+        }
+        len
+    }
+    pub fn get_program(&self) -> Vec<u8> {
+        let mut v = Vec::new() ;
+        v.push(self.opcode.to_u8().unwrap());
+        if self.operandl != Operands::Null{
+            let mut b = self.operandl.to_int();
+            v.append(&mut b);
+        }
+        if self.operandr != Operands::Null{
+            let mut b = self.operandr.to_int();
+            v.append(&mut b);            
+        }
+        v
+    }
 }
+
+
+
+
+#[derive(Debug,PartialEq)]
+pub(crate) enum SimpleOperands{
+    Reg,
+    PushPop,
+    Static,
+    String,
+    Ptr,
+    Nop
+}
+impl SimpleOperands {
+    pub fn from_operand(a:OperandType) -> Self{
+        match a {
+            OperandType::Static => Self::Static,
+            OperandType::EAX |
+            OperandType::EBX |
+            OperandType::ECX |
+            OperandType::EDX |
+            OperandType::EBP |
+            OperandType::ESP |
+            OperandType::R1 |
+            OperandType::R2 |
+            OperandType::R3 |
+            OperandType::R4 |
+            OperandType::R5 |
+            OperandType::R6 |
+            OperandType::AL |
+            OperandType::AH |
+            OperandType::BL |
+            OperandType::BH |
+            OperandType::CL |
+            OperandType::CH |
+            OperandType::DL |
+            OperandType::DH => Self::Reg,
+
+            OperandType::Pointer | 
+            OperandType::BYTEPTR |
+            OperandType::WORDPTR |
+            OperandType::DWORDPTR |
+            OperandType::QWORDPTR => Self::Ptr,
+            OperandType::String => Self::String,
+            OperandType::NOP => Self::Nop,
+        }
+    }
+}
+
+
+
 impl PtrInner {
     fn from_str<S:Into<String>>(data:S) -> Option<Self>{
         let d:String = data.into();
@@ -574,29 +533,7 @@ impl PtrInner {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
-pub(crate) enum Registers{
-    EAX,
-    EBX,
-    ECX,
-    EDX,
-    EBP,
-    ESP,
-    R1,
-    R2,
-    R3,
-    R4,
-    R5,
-    R6,
-    AL,
-    AH,
-    BL,
-    BH,
-    CL,
-    CH,
-    DL,
-    DH,
-}
+
 impl Registers {
     fn from_str<S:Into<String>>(data:S) -> Option<Self>{
         let d:String = data.into();
@@ -664,6 +601,14 @@ impl Registers {
             OperandType::R4 => Self::R4,
             OperandType::R5 => Self::R5,
             OperandType::R6 => Self::R6,
+            OperandType::AL => Self::AL,
+            OperandType::AH => Self::AH,
+            OperandType::BL => Self::BL,
+            OperandType::BH => Self::BH,
+            OperandType::CL => Self::CL,
+            OperandType::CH => Self::CH,
+            OperandType::DL => Self::DL,
+            OperandType::DH => Self::DH,
             _=> todo!(),
         }
     }
