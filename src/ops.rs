@@ -19,7 +19,7 @@ pub enum OpCodes{
     And,
     Nand,
     Nor,
-
+    Lea,
     Push8 = 20,
     Push16,
     Push32,
@@ -44,7 +44,6 @@ pub enum OpCodes{
     Call,
     Ret,
     SysCall,
-    Db = 200,
     Nop = 255,
 }
 

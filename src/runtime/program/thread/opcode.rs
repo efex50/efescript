@@ -259,7 +259,7 @@ pub(super) fn handle_opcodes(&mut self,i:&Instuction){
             }
 
         },
-        OpCodes::Db => todo!(),
+        OpCodes::Lea => todo!(),
     }
 }
 

@@ -149,7 +149,7 @@ impl PThread{
                 });
     
             },
-            OpCodes::Db => todo!(),
+            OpCodes::Lea => todo!(),
         }
     }
 

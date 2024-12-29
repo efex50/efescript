@@ -768,7 +768,6 @@ fn parse_opcode<S:Into<String>>(a:S) -> Option<OpCodes>{
         "NAND" | "Nand" | "nand" => Some(OpCodes::Nand),
 
 
-        "DB" | "Db" | "db" => Some(OpCodes::Db),
         
         
         _ => None
@@ -900,13 +899,6 @@ fn parse_str_to_instructions(str:String) -> Vec<PreCompile> {
                 continue;
             },
 
-            OpCodes::Db => {
-                let mut str :Vec<u8> = Vec::new();
-                let mut a = iter;
-                get_db_data(&mut a);
-                todo!();
-                continue;
-            }
             _ => ()
         }
 
