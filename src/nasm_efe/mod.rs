@@ -38,13 +38,13 @@ impl Operands{
                 v.append(&mut l);
                 v
             },
-            Operands::String(l)=> {
-                let mut v = vec![OperandType::String.to_u8().unwrap()];
-                v.push(l.len() as u8);
-                let mut l = l.clone();
-                v.append(&mut l);
-                v
-            },
+            // Operands::String(l)=> {
+            //     let mut v = vec![OperandType::String.to_u8().unwrap()];
+            //     v.push(l.len() as u8);
+            //     let mut l = l.clone();
+            //     v.append(&mut l);
+            //     v
+            // },
             Operands::EAX => vec![OperandType::EAX.to_u8().unwrap()],
             Operands::EBX => vec![OperandType::EBX.to_u8().unwrap()],
             Operands::ECX => vec![OperandType::ECX.to_u8().unwrap()],

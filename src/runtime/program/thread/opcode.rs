@@ -1,11 +1,19 @@
 use num_traits::Zero;
 
 use crate::{ops::OpCodes, runtime::Instuction};
-use super::PThread;
+use super::{PThread, SyscallSignal};
+
+
+pub enum HandleSignal{
+    Ok,
+    Todo(Box<dyn AsRef<str>>),
+    Syscall(SyscallSignal)
+}
+
 
 impl PThread{
     
-pub(super) fn handle_opcodes(&mut self,i:&Instuction){
+pub(super) fn handle_opcodes(&mut self,i:&Instuction) -> HandleSignal{
 
     let prg = unsafe {
         &mut *self.program
@@ -200,7 +208,8 @@ pub(super) fn handle_opcodes(&mut self,i:&Instuction){
             self.counter = d;
         },
         OpCodes::SysCall => {
-            self.handle_syscalls();
+            let sig = self.handle_syscalls();
+            return HandleSignal::Syscall(sig);
         },
         OpCodes::Nop => (),
         OpCodes::Je  => {
@@ -259,8 +268,10 @@ pub(super) fn handle_opcodes(&mut self,i:&Instuction){
             }
 
         },
-        OpCodes::Lea => todo!(),
-    }
+        OpCodes::Lea => return HandleSignal::Todo(Box::new("Lea not implemented")),
+    };
+    return HandleSignal::Ok;
+    
 }
 
 

@@ -4,11 +4,11 @@ use num_traits::FromPrimitive;
 
 use crate::{funs::as_usize, runtime::data_funs::NumToStr, syscalls::SysCalls};
 
-use super::PThread;
+use super::{PThread, SyscallSignal};
 
 impl PThread{
     
-    pub(super)  fn handle_syscalls(&mut self){
+    pub(super) fn handle_syscalls(&mut self) -> SyscallSignal{
 
         let prg = unsafe {
             &mut *self.program
@@ -38,7 +38,7 @@ impl PThread{
             },
             SysCalls::Finish => {
                 let code = self.registers.ebx;
-                std::process::exit(code as i32);
+                return SyscallSignal::Finish(code as u8);
             },
             SysCalls::NumToString => {
                 let r = self.registers.ebx;
@@ -146,7 +146,10 @@ impl PThread{
             },
             SysCalls::Write => todo!(),
             SysCalls::Flush => todo!(),
-        }
+        };
+        return SyscallSignal::Ok;
     }
 
 }
+
+

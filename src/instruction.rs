@@ -11,7 +11,7 @@ pub(crate) struct Instuction{
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum Operands{
     Static(usize),
-    String(Vec<u8>),//todo
+    // String(Vec<u8>),//todo
     Label(String),
     EAX,
     EBX,

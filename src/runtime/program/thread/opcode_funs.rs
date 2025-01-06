@@ -10,7 +10,7 @@ impl PThread {
 
         match a {
             Operands::Static(s) => *s,
-            Operands::String(_vec) => todo!(),
+            // Operands::String(_vec) => todo!(),
             Operands::EAX => self.registers.eax,
             Operands::EBX => self.registers.ebx,
             Operands::ECX => self.registers.ecx,

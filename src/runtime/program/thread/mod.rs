@@ -38,6 +38,14 @@ impl Default for PThread {
     }
 }
 
-impl PThread {
-    
+
+
+pub enum SyscallSignal{
+    Ok,
+    Finish(u8),
+    Err(SyscallError),
+}
+#[repr(u8)]
+pub enum SyscallError{
+    Todo
 }
