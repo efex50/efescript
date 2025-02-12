@@ -5,6 +5,8 @@ use efescript::prelude::*;
 
 fn main() 
 {   
+    let mut v: Vec<u8> = Vec::new();
+    
 
     let args:Vec<String> = args().map(|d| d).collect();
     if args.len() < 2 {
@@ -77,7 +79,7 @@ fn print_help(){
 
 
 
-
+#[allow(warnings)]
 mod tests{
     use std::io::{stdout, BufWriter, Write};
 
@@ -104,7 +106,7 @@ mod tests{
     }
 
 }
-
+#[allow(warnings)]
 mod grok{
     use std::io::{self, Write};
 
