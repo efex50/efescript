@@ -21,6 +21,7 @@ enum Objects{
     AfterJump{
         type_:OpCodes,
         label:String,
+        /// size of the jump instruction
         jump:Vec<u8>
     },
     Label(String),
