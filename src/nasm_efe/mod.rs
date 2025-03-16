@@ -5,6 +5,7 @@ use num_traits::ToPrimitive;
 
 use crate::{funs::{as_usize, get_db_data, trim_zeroes}, instruction::{Instuction, Operands, PtrInner, Registers}, ops::OpCodes};
 pub mod nasm_compiler;
+pub mod v2;
 
 #[derive(Debug)]
 pub(crate) enum PreCompile{
@@ -649,6 +650,7 @@ pub(crate) enum OperandType{
 }
 
 
+
 fn parse_operand_types<S:Into<String>>(data:S) -> Option<OperandType>{
     let d:String = data.into();
     match d.as_str() {
@@ -704,7 +706,7 @@ pub(crate) fn parse_register_type_to_op(a:OperandType) -> Option<Operands>{
         OperandType::R6 => Some(Operands::R6),
         
         OperandType::AL => Some(Operands::AL),
-        OperandType::AH => Some(Operands::AL),
+        OperandType::AH => Some(Operands::AH),
         OperandType::BL => Some(Operands::BL),
         OperandType::BH => Some(Operands::BH),
         OperandType::CL => Some(Operands::CL),

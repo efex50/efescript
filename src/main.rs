@@ -2,7 +2,6 @@ use std::env::args;
 use efescript::prelude::*;
 
 
-
 fn main() 
 {   
     let mut v: Vec<u8> = Vec::new();

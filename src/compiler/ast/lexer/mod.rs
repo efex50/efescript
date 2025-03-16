@@ -1,22 +1,25 @@
+use std::rc::Rc;
+
 
 
 #[derive(Clone,Debug)]
-struct Position{
-    start:LineColmn,
-    end:LineColmn
+pub struct Position{
+    pub start:LineColmn,
+    pub end:LineColmn
 }
 #[derive(Clone,Debug)]
-struct LineColmn{
-    line: u64,
-    colmn:u64
+pub struct LineColmn{
+    pub line: u64,
+    pub colmn:u64
 }
+
+
 
 #[repr(u8)]
-#[derive(Debug)]
-enum LexerTokenType{
+#[derive(Debug,PartialEq,Clone)]
+pub enum LexerTokenType{
     Number(i128),
-    Ident( String),
-    String(String),
+    Ident (String),
     
     //  operator signs
 
@@ -64,12 +67,11 @@ enum LexerTokenType{
     Equal,
     /// sign ;
     SemiColon,
-    /// sign //
-    Comment,
-    /// sign /*
-    MCommentStart,
-    /// sign */
-    MCommentEnd,
+
+    /// space
+    Space,
+    /// tab space
+    TabSpace,
 
 
     /// end of line
@@ -77,23 +79,57 @@ enum LexerTokenType{
     /// end of file
     EOF,
 }
-#[derive(Debug)]
+
+impl LexerTokenType {
+    pub fn get_inner_str(&self) -> Option<&String> {
+        match &self {
+            LexerTokenType::Ident(s) => Some(s),
+            _ => None
+        }
+    }
+    pub fn get_inner_num(&self) -> Option<&i128> {
+        match self {
+            LexerTokenType::Number(n) => Some(n),
+            _ => None
+        }
+    }
+}
+
+
+#[derive(Debug,Clone)]
 pub struct LexerTokens{
     token_type:LexerTokenType,
     pos:Position
 } 
 
 impl LexerTokens {
+
+    pub fn len(&self) -> u64{
+        let len = self.pos.end.colmn - self.pos.start.colmn;
+        len
+    }
+
     pub fn str_to_token<S:Into<String>>(str:S) -> Vec<Self>{
         let str:String = str.into();
-        let tokens = Self::to_token_inner(&str);
+        let tokens = Self::get_tokens_merged(&str);
         return tokens; 
     }
     pub fn string_to_token(str:&String) -> Vec<Self>{
-        let tokens = Self::to_token_inner(str);
+        let tokens = Self::get_tokens_merged(str);
         return tokens; 
     }
 
+    // does the space merging
+    fn get_tokens_merged(str:&String) -> Vec<Self>{
+        let tokens = Self::to_token_inner(str); 
+        let tokens = Self::merge_spaces(tokens);
+        return tokens; 
+    }
+
+
+
+
+    
     fn new(start:LineColmn,end:LineColmn,tok_type:LexerTokenType) -> Self{
         return Self {
             token_type: tok_type,
@@ -101,113 +137,186 @@ impl LexerTokens {
         };
     }
 
+
+
     fn to_token_inner(str:&String) -> Vec<LexerTokens>{
-        
         
         let mut str = str.chars();
 
-        let mut counter = 0;
         let (mut line,mut column) = (1u64,1u64);
+        let line_ptr = &mut line as *mut u64 ;
+        let column_ptr = &mut column as *mut u64;
         let mut tokens = Vec::<LexerTokens>::new();
+        
+        
         let start = LineColmn { line, colmn : column };
+        
         loop{
             let x = str.next();
+            
+            
+            //----
+            let get_sym_token = |char:char| -> Option<LexerTokens>{
+    
+                let token = match char {
+                    '+'  => Some(LexerTokens{token_type:LexerTokenType::Plus,pos:Position         { start: LineColmn { line, colmn: column }, end: LineColmn { line, colmn: column+1 } }}),
+                    '-'  => Some(LexerTokens{token_type:LexerTokenType::Minus,pos:Position        { start: LineColmn { line, colmn: column }, end: LineColmn { line, colmn: column+1 } }}),
+                    '*'  => Some(LexerTokens{token_type:LexerTokenType::Star,pos:Position         { start: LineColmn { line, colmn: column }, end: LineColmn { line, colmn: column+1 } }}),
+                    '^'  => Some(LexerTokens{token_type:LexerTokenType::Exponent,pos:Position     { start: LineColmn { line, colmn: column }, end: LineColmn { line, colmn: column+1 } }}),
+                    '%'  => Some(LexerTokens{token_type:LexerTokenType::Percent,pos:Position      { start: LineColmn { line, colmn: column }, end: LineColmn { line, colmn: column+1 } }}),
+                    '&'  => Some(LexerTokens{token_type:LexerTokenType::And,pos:Position          { start: LineColmn { line, colmn: column }, end: LineColmn { line, colmn: column+1 } }}),
+                    '|'  => Some(LexerTokens{token_type:LexerTokenType::Or,pos:Position           { start: LineColmn { line, colmn: column }, end: LineColmn { line, colmn: column+1 } }}),
+                    '!'  => Some(LexerTokens{token_type:LexerTokenType::Exclamation,pos:Position  { start: LineColmn { line, colmn: column }, end: LineColmn { line, colmn: column+1 } }}),
+                    '('  => Some(LexerTokens{token_type:LexerTokenType::LPar,pos:Position         { start: LineColmn { line, colmn: column }, end: LineColmn { line, colmn: column+1 } }}),
+                    ')'  => Some(LexerTokens{token_type:LexerTokenType::RPar,pos:Position         { start: LineColmn { line, colmn: column }, end: LineColmn { line, colmn: column+1 } }}),
+                    '{'  => Some(LexerTokens{token_type:LexerTokenType::RCPar,pos:Position        { start: LineColmn { line, colmn: column }, end: LineColmn { line, colmn: column+1 } }}),
+                    '}'  => Some(LexerTokens{token_type:LexerTokenType::LCPar,pos:Position        { start: LineColmn { line, colmn: column }, end: LineColmn { line, colmn: column+1 } }}),
+                    '.'  => Some(LexerTokens{token_type:LexerTokenType::Dot,pos:Position          { start: LineColmn { line, colmn: column }, end: LineColmn { line, colmn: column+1 } }}),
+                    ','  => Some(LexerTokens{token_type:LexerTokenType::Punc,pos:Position         { start: LineColmn { line, colmn: column }, end: LineColmn { line, colmn: column+1 } }}),
+                    '='  => Some(LexerTokens{token_type:LexerTokenType::Equal,pos:Position        { start: LineColmn { line, colmn: column }, end: LineColmn { line, colmn: column+1 } }}),
+                    '~'  => Some(LexerTokens{token_type:LexerTokenType::Tilde,pos:Position        { start: LineColmn { line, colmn: column }, end: LineColmn { line, colmn: column+1 } }}),
+                    ';'  => Some(LexerTokens{token_type:LexerTokenType::SemiColon,pos:Position    { start: LineColmn { line, colmn: column }, end: LineColmn { line, colmn: column+1 } }}),
+                    '\n' => Some(LexerTokens{token_type:LexerTokenType::EOL,pos:Position          { start: LineColmn { line, colmn: column }, end: LineColmn { line, colmn: column+1 } }}),
+                    '\t' => Some(LexerTokens{token_type:LexerTokenType::TabSpace,pos:Position     { start: LineColmn { line, colmn: column }, end: LineColmn { line, colmn: column+1 } }}),
+                    '/'  => Some(LexerTokens{token_type:LexerTokenType::Slash,pos:Position        { start: LineColmn { line, colmn: column }, end: LineColmn { line, colmn: column+1 } }}),
+                    '"'  => Some(LexerTokens{token_type:LexerTokenType::DQuote,pos:Position       { start: LineColmn { line, colmn: column }, end: LineColmn { line, colmn: column+1 } }}),
+                    '\'' => Some(LexerTokens{token_type:LexerTokenType::Quote,pos:Position        { start: LineColmn { line, colmn: column }, end: LineColmn { line, colmn: column+1 } }}),
+                    ' '  => Some(LexerTokens{token_type:LexerTokenType::Space,pos:Position        { start: LineColmn { line, colmn: column }, end: LineColmn { line, colmn: column+1 } }}),
+                    '`'  => Some(LexerTokens{token_type:LexerTokenType::TildeQuote,pos:Position   { start: LineColmn { line, colmn: column }, end: LineColmn { line, colmn: column+1 } }}),
+                    
+                    _ => None,
+                };
+                
+                token
+            };
+            //----
+            let handle_sym_token_line = |tok_type:&LexerTokens| {
+                if tok_type.token_type == LexerTokenType::EOL{
+                    unsafe {
+                        *column_ptr=1;
+                        *line_ptr+=1;
+                    }
+                }
+                //else if tok_type.token_type == LexerTokenType::Space {
+                //    
+                //}
+                else {
+                    unsafe {*column_ptr+=1};
+                }
+            };
+            //----
+
             if x.is_none(){
                 tokens.push(LexerTokens::new(start.clone(), start.clone(),  LexerTokenType::EOF));
                 return tokens;
             }
             let char = x.unwrap();
             
-            counter += 1;
-            println!("counter: {counter} ={:?}",x);
-            let token = match char {
-                '+' => LexerTokens{token_type:LexerTokenType::Plus,pos:Position         { start: LineColmn { line: line, colmn: column }, end: LineColmn { line: line, colmn: column+1 } }},
-                '-' => LexerTokens{token_type:LexerTokenType::Minus,pos:Position        { start: LineColmn { line: line, colmn: column }, end: LineColmn { line: line, colmn: column+1 } }},
-                '*' => LexerTokens{token_type:LexerTokenType::Star,pos:Position         { start: LineColmn { line: line, colmn: column }, end: LineColmn { line: line, colmn: column+1 } }},
-
-                // should handle the comment case
-                '/' => LexerTokens{token_type:LexerTokenType::Slash,pos:Position        { start: LineColmn { line: line, colmn: column }, end: LineColmn { line: line, colmn: column+1 } }},
-                '^' => LexerTokens{token_type:LexerTokenType::Exponent,pos:Position     { start: LineColmn { line: line, colmn: column }, end: LineColmn { line: line, colmn: column+1 } }},
-                '%' => LexerTokens{token_type:LexerTokenType::Percent,pos:Position      { start: LineColmn { line: line, colmn: column }, end: LineColmn { line: line, colmn: column+1 } }},
-                '&' => LexerTokens{token_type:LexerTokenType::And,pos:Position          { start: LineColmn { line: line, colmn: column }, end: LineColmn { line: line, colmn: column+1 } }},
-                '|' => LexerTokens{token_type:LexerTokenType::Or,pos:Position           { start: LineColmn { line: line, colmn: column }, end: LineColmn { line: line, colmn: column+1 } }},
-                '!' => LexerTokens{token_type:LexerTokenType::Exclamation,pos:Position  { start: LineColmn { line: line, colmn: column }, end: LineColmn { line: line, colmn: column+1 } }},
-                
-                '(' => LexerTokens{token_type:LexerTokenType::LPar,pos:Position         { start: LineColmn { line: line, colmn: column }, end: LineColmn { line: line, colmn: column+1 } }},
-                ')' => LexerTokens{token_type:LexerTokenType::RPar,pos:Position         { start: LineColmn { line: line, colmn: column }, end: LineColmn { line: line, colmn: column+1 } }},
-                '{' => LexerTokens{token_type:LexerTokenType::RCPar,pos:Position        { start: LineColmn { line: line, colmn: column }, end: LineColmn { line: line, colmn: column+1 } }},
-                '}' => LexerTokens{token_type:LexerTokenType::LCPar,pos:Position        { start: LineColmn { line: line, colmn: column }, end: LineColmn { line: line, colmn: column+1 } }},
-                '.' => LexerTokens{token_type:LexerTokenType::Dot,pos:Position          { start: LineColmn { line: line, colmn: column }, end: LineColmn { line: line, colmn: column+1 } }},
-                ',' => LexerTokens{token_type:LexerTokenType::Punc,pos:Position         { start: LineColmn { line: line, colmn: column }, end: LineColmn { line: line, colmn: column+1 } }},
-                '=' => LexerTokens{token_type:LexerTokenType::Equal,pos:Position        { start: LineColmn { line: line, colmn: column }, end: LineColmn { line: line, colmn: column+1 } }},
-                '~' => LexerTokens{token_type:LexerTokenType::Tilde,pos:Position        { start: LineColmn { line: line, colmn: column }, end: LineColmn { line: line, colmn: column+1 } }},
-                ';' => LexerTokens{token_type:LexerTokenType::SemiColon,pos:Position    { start: LineColmn { line: line, colmn: column }, end: LineColmn { line: line, colmn: column+1 } }},
-                '\n' => LexerTokens{token_type:LexerTokenType::EOL,pos:Position         { start: LineColmn { line: line, colmn: column }, end: LineColmn { line: line, colmn: column+1 } }},
-                
-                '"' => {
-                    get_str(str,'"',&mut line,&mut column);
-                    todo!()
-                },
-                '´' => {
-                    get_str(str,'`',&mut line,&mut column);
-                    todo!()
-                },
-                '\'' => {
-                    get_str(str,'\'',&mut line,&mut column);
-                    todo!()
-                },
-
-                ' ' => {
-                    column+=1;
-                    continue;
+            
+            if let Some(lt) = get_sym_token(char){
+                handle_sym_token_line(&lt);
+                if lt.token_type == LexerTokenType::EOF{
+                    tokens.push(lt);
+                    break;
                 }
-                _ => {
-                    eprint!("error at :{}",char);
-                    todo!("not yet")
-                }  
-            };
-            match token.token_type {
-                LexerTokenType::Plus |
-                LexerTokenType::Minus |
-                LexerTokenType::Star |
-                LexerTokenType::Slash |
-                LexerTokenType::Exponent |
-                LexerTokenType::Percent |
-                LexerTokenType::And |
-                LexerTokenType::Or |
-                LexerTokenType::Exclamation |
-                LexerTokenType::Tilde |
-                LexerTokenType::RPar |
-                LexerTokenType::LPar |
-                LexerTokenType::Punc |
-                LexerTokenType::Dot |
-                LexerTokenType::LCPar |
-                LexerTokenType::RCPar |
-                LexerTokenType::Equal |
-                LexerTokenType::SemiColon =>{column+=1;tokens.push(token);},
-                LexerTokenType::EOL => {column=1;line+=1;tokens.push(token);},
-                
-                // strings
-                LexerTokenType::Quote |
-                LexerTokenType::DQuote |
-                LexerTokenType::TildeQuote =>{
-                    panic!("strings are not yet implemented")
-                }
-                
-                LexerTokenType::Comment |
-                LexerTokenType::MCommentStart |
-                LexerTokenType::MCommentEnd => (),
-
-                LexerTokenType::EOF => break,
-                _ => (),
+                tokens.push(lt);
             }
+            else {
+                let mut v: Vec<char> = Vec::new();
+                v.push(char);
+                
+                let start = unsafe {LineColmn{colmn:*column_ptr,line:*line_ptr} };
+                loop {
+                    let x = str.next();
+                    if x.is_none(){
+                        tokens.push(LexerTokens::new(start.clone(), start.clone(),  LexerTokenType::EOF));
+                        return tokens;
+                    }
+                    let char = x.unwrap();
+        
+
+                    if let Some(lt) = get_sym_token(char){
+                        unsafe {*column_ptr.clone() += 1;}
+
+                        let ident_s = v.into_iter().collect::<String>();
+                        let end = unsafe {LineColmn{colmn:*column_ptr,line:*line_ptr} };
+                        let a = if let Ok(num) = i128::from_str_radix(&ident_s, 10){
+                            LexerTokens::new(start.clone(), end, LexerTokenType::Number(num))
+                        }
+                        else {
+                            LexerTokens::new(start.clone(), end, LexerTokenType::Ident(ident_s))
+                        };
+                        tokens.push(a);
+                        let t = get_sym_token(char).unwrap();
+                        handle_sym_token_line(&lt);
+                        tokens.push(t);
+                        break;
+                    }else{
+                        unsafe { *column_ptr.clone() += 1;}
+                        v.push(char);
+                    }
+                }
+            }
+
+
         }
 
         return tokens;
     }
+
+    fn merge_spaces(v:Vec<Self>) -> Vec<Self>{
+        let mut t = Vec::new();
+        let mut iter = v.iter();
+        loop{
+            let x = iter.next();
+            let x = x.unwrap();
+            if x.token_type == LexerTokenType::EOF{
+                t.push(x.clone());
+                return t;
+            }
+
+            if x.token_type == LexerTokenType::Space {
+                let start = x.pos.start.clone();
+                let mut prev = x;
+                loop {
+
+                    // not checking because it will hit EOF eventually
+                    let next = iter.next().unwrap();
+                    //if next.is_none(){
+                    //    break prev.pos.end.clone();
+                    //}
+                    //let next = next.unwrap();
+
+                    if next.token_type != LexerTokenType::Space{    
+                        let end = next.clone();
+                        
+                        t.push(LexerTokens::new(start, prev.pos.end.clone(), LexerTokenType::Space));
+                        t.push(end);
+                        if next.token_type == LexerTokenType::EOF{
+                            return t;
+                        }
+                        break ;
+
+                    }else {
+                        
+                        prev = next;
+                    }
+                };
+                
+            }
+            else {
+                t.push(x.clone());
+            }
+        }
+        
+    }
 }
 
-
+/// unimplemented
+/// 
+/// gets the string with matching token
+/// 
+/// todo for more dynamic lexer
 fn get_str(mut chars:impl Iterator<Item = char> , end_token:char,line:&mut u64,column:&mut u64)->Option<String>{
     let mut str = String::new();
     loop {
@@ -216,6 +325,7 @@ fn get_str(mut chars:impl Iterator<Item = char> , end_token:char,line:&mut u64,c
             if c == end_token{
                 return Some(str);
             }
+            str.push(c);
         }else {
             return None;
         }
@@ -225,24 +335,38 @@ fn get_str(mut chars:impl Iterator<Item = char> , end_token:char,line:&mut u64,c
 }
 
 
-
-
-
 mod test{
     use crate::compiler::ast::lexer::LexerTokens;
+
+    
     #[test]
     fn test_tokenize(){
         let s = 
         "
-        void main(){
-            int a = 10;
-        }
-        ";
+        void main(){int a = 10;}  3818  .";
         let ss = 
         "
         ..,()^+
         .....";
-        let toks = LexerTokens::str_to_token(ss);
-        println!("{:#?}",toks)
+        let toks = LexerTokens::str_to_token(s);
+        
+        //println!("{toks:#?}");
+        
+        {
+            let tok_out = format!("{toks:#?}");
+            let out_path = "./test_out/lexer_tokens.ron";
+            std::fs::create_dir_all("./test_out").unwrap();
+            std::fs::write(out_path, tok_out).unwrap();
+        }
+    }
+
+    #[test]
+    fn sizeofchar(){
+        println!("{}",size_of_val(&'a'))
+    }
+    #[test]
+    fn unsafe_test(){
+        let 𐰦 = 21;
+        println!("{}",𐰦)
     }
 }

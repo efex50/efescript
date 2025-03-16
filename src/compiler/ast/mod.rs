@@ -14,17 +14,17 @@ pub enum AstObj {
     AstCalc,
 }
     
-pub enum Primitives{
-    Int{
-        ident:String,
-        value:i32,
-    },
-    Unt{
-        ident:String,
-        value:u32,
-    },
-    Array{
-        ident:String,
-        value:Vec<u32>// todo 
-    },
-}
+    pub enum Primitives{
+        Int{
+            ident:String,
+            value:i32,
+        },
+        Unt{
+            ident:String,
+            value:u32,
+        },
+        Array{
+            ident:String,
+            value:Vec<u32>// todo 
+        },
+    }
