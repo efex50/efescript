@@ -8,6 +8,7 @@ pub mod nasm_efe;
 pub(crate)mod runtime;
 pub mod compiler;
 pub mod instruction;
+pub mod debugger;
 
 
 
