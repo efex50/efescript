@@ -1,4 +1,6 @@
 
+use num_derive::{FromPrimitive, ToPrimitive};
+
 use crate::ops::OpCodes;
 
 
@@ -13,12 +15,12 @@ pub(crate) enum Operands{
     Static(usize),
     // String(Vec<u8>),//todo
     Label(String),
-    EAX,
-    EBX,
-    ECX,
-    EDX,
-    EBP,
-    ESP,
+    RA,
+    RB,
+    RC,
+    RD,
+    RBP,
+    RSP,
     R1,
     R2,
     R3,
@@ -56,12 +58,12 @@ pub(crate) enum PtrInner{
 
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum Registers{
-    EAX,
-    EBX,
-    ECX,
-    EDX,
-    EBP,
-    ESP,
+    RA,
+    RB,
+    RC,
+    RD,
+    RBP,
+    RSP,
     R1,
     R2,
     R3,

@@ -1,7 +1,7 @@
-use crate::{as_be_bytes, instruction::Operands, runtime::{data_funs::get_inner_ptr,Instuction}};
+use crate::{as_be_bytes, instruction::Operands, nasm_efe::OperandType, runtime::{data_funs::get_inner_ptr,Instuction}};
 use num_traits::FromPrimitive;
 
-use crate::{ops::OpCodes, runtime::{parse_register_type_to_op, OperandType, SimpleOperands}};
+use crate::{ops::OpCodes, runtime::{parse_register_type_to_op, SimpleOperands}};
 
 use super::PThread;
 
@@ -127,6 +127,7 @@ impl PThread{
             OpCodes::Jle |
             OpCodes::Jge |
             OpCodes::Jz |
+            OpCodes::Js |
             OpCodes::Jnz => {
                 self.counter += 1;
                 //left

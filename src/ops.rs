@@ -32,14 +32,24 @@ pub enum OpCodes{
     Test,
     Jmp,
 
+    /// jump equal
     Je,
+    /// jump not equal
     Jne,
+    /// jump greater than
     Jgt,
+    /// jump lesser than
     Jlt,
+    /// jump lesser equal
     Jle,
+    /// jump greater equal
     Jge,
+    /// jump zero
     Jz,
+    /// jump not zero
     Jnz,
+    /// jump signed
+    Js,
 
     Call,
     Ret,

@@ -1,8 +1,9 @@
 use num_traits::FromPrimitive;
 
-use super::as_be_bytes;
+use crate::nasm_efe::OperandType;
+
+use super::{as_be_bytes, SimpleOperands};
 use super::instruction::{Operands, PtrInner, Registers};
-use super::nasm_efe::{OperandType, SimpleOperands};
 use efepages::page::Page;
 
 pub enum NumToStr{

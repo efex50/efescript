@@ -12,7 +12,7 @@ impl ProgramRuntime{
 
     pub fn compile_from_file<S:Into<String>>(path:S) -> Self{
         
-        let v = parse_from_file(path);
+        let v = parse_from_file(path).unwrap();
         let mut slf = Self::default();
 
         slf.program_size = v.len();
@@ -61,7 +61,7 @@ impl ProgramRuntime{
         let mut main_thread = PThread::default();
 
         //new
-        main_thread.registers.esp = self.program_size + 2;
+        main_thread.registers.rsp = self.program_size + 2;
         main_thread.program = &mut self.program;
         main_thread.id = 0;
 
@@ -71,7 +71,7 @@ impl ProgramRuntime{
 
         self.threads.push(main_thread);
 
-        dbg!(&self);
+        //dbg!(&self);
 
     }
 

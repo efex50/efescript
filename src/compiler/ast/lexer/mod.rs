@@ -18,7 +18,7 @@ pub struct LineColmn{
 #[repr(u8)]
 #[derive(Debug,PartialEq,Clone)]
 pub enum LexerTokenType{
-    Number(i128),
+    Number(i64),
     Ident (String),
     
     //  operator signs
@@ -63,6 +63,10 @@ pub enum LexerTokenType{
     LCPar,
     /// sign }
     RCPar,
+    /// sign [
+    LSPar,
+    /// sign ]
+    RSPar,
     /// sign =
     Equal,
     /// sign ;
@@ -87,7 +91,13 @@ impl LexerTokenType {
             _ => None
         }
     }
-    pub fn get_inner_num(&self) -> Option<&i128> {
+    pub fn get_inner_str_owned(self) -> Option<String> {
+        match self {
+            LexerTokenType::Ident(s) => Some(s),
+            _ => None
+        }
+    }
+    pub fn get_inner_num(&self) -> Option<&i64> {
         match self {
             LexerTokenType::Number(n) => Some(n),
             _ => None
@@ -98,8 +108,8 @@ impl LexerTokenType {
 
 #[derive(Debug,Clone)]
 pub struct LexerTokens{
-    token_type:LexerTokenType,
-    pos:Position
+    pub token_type:LexerTokenType,
+    pub pos:Position
 } 
 
 impl LexerTokens {
@@ -122,7 +132,9 @@ impl LexerTokens {
     // does the space merging
     fn get_tokens_merged(str:&String) -> Vec<Self>{
         let tokens = Self::to_token_inner(str); 
+        // println!("{:?}",tokens);
         let tokens = Self::merge_spaces(tokens);
+        // println!("{:?}",tokens);
         return tokens; 
     }
 
@@ -144,8 +156,12 @@ impl LexerTokens {
         let mut str = str.chars();
 
         let (mut line,mut column) = (1u64,1u64);
+
+        //unsafe 
         let line_ptr = &mut line as *mut u64 ;
         let column_ptr = &mut column as *mut u64;
+        //unsafe 
+
         let mut tokens = Vec::<LexerTokens>::new();
         
         
@@ -169,8 +185,10 @@ impl LexerTokens {
                     '!'  => Some(LexerTokens{token_type:LexerTokenType::Exclamation,pos:Position  { start: LineColmn { line, colmn: column }, end: LineColmn { line, colmn: column+1 } }}),
                     '('  => Some(LexerTokens{token_type:LexerTokenType::LPar,pos:Position         { start: LineColmn { line, colmn: column }, end: LineColmn { line, colmn: column+1 } }}),
                     ')'  => Some(LexerTokens{token_type:LexerTokenType::RPar,pos:Position         { start: LineColmn { line, colmn: column }, end: LineColmn { line, colmn: column+1 } }}),
-                    '{'  => Some(LexerTokens{token_type:LexerTokenType::RCPar,pos:Position        { start: LineColmn { line, colmn: column }, end: LineColmn { line, colmn: column+1 } }}),
-                    '}'  => Some(LexerTokens{token_type:LexerTokenType::LCPar,pos:Position        { start: LineColmn { line, colmn: column }, end: LineColmn { line, colmn: column+1 } }}),
+                    '{'  => Some(LexerTokens{token_type:LexerTokenType::LCPar,pos:Position        { start: LineColmn { line, colmn: column }, end: LineColmn { line, colmn: column+1 } }}),
+                    '}'  => Some(LexerTokens{token_type:LexerTokenType::RCPar,pos:Position        { start: LineColmn { line, colmn: column }, end: LineColmn { line, colmn: column+1 } }}),
+                    '['  => Some(LexerTokens{token_type:LexerTokenType::LSPar,pos:Position        { start: LineColmn { line, colmn: column }, end: LineColmn { line, colmn: column+1 } }}),
+                    ']'  => Some(LexerTokens{token_type:LexerTokenType::RSPar,pos:Position        { start: LineColmn { line, colmn: column }, end: LineColmn { line, colmn: column+1 } }}),
                     '.'  => Some(LexerTokens{token_type:LexerTokenType::Dot,pos:Position          { start: LineColmn { line, colmn: column }, end: LineColmn { line, colmn: column+1 } }}),
                     ','  => Some(LexerTokens{token_type:LexerTokenType::Punc,pos:Position         { start: LineColmn { line, colmn: column }, end: LineColmn { line, colmn: column+1 } }}),
                     '='  => Some(LexerTokens{token_type:LexerTokenType::Equal,pos:Position        { start: LineColmn { line, colmn: column }, end: LineColmn { line, colmn: column+1 } }}),
@@ -229,6 +247,20 @@ impl LexerTokens {
                 loop {
                     let x = str.next();
                     if x.is_none(){
+                        if !v.is_empty(){
+                            let ident_s = v.into_iter().collect::<String>();
+                            //println!("{}",ident_s);
+
+                            let end = unsafe {LineColmn{colmn:*column_ptr,line:*line_ptr} };
+                            let a = if let Ok(num) = i64::from_str_radix(&ident_s, 10){
+                                LexerTokens::new(start.clone(), end, LexerTokenType::Number(num))
+                            }
+                            else {
+                                LexerTokens::new(start.clone(), end, LexerTokenType::Ident(ident_s))
+                            };
+                            tokens.push(a);
+    
+                        }
                         tokens.push(LexerTokens::new(start.clone(), start.clone(),  LexerTokenType::EOF));
                         return tokens;
                     }
@@ -237,10 +269,10 @@ impl LexerTokens {
 
                     if let Some(lt) = get_sym_token(char){
                         unsafe {*column_ptr.clone() += 1;}
-
                         let ident_s = v.into_iter().collect::<String>();
+                        //println!("{}",ident_s);
                         let end = unsafe {LineColmn{colmn:*column_ptr,line:*line_ptr} };
-                        let a = if let Ok(num) = i128::from_str_radix(&ident_s, 10){
+                        let a = if let Ok(num) = i64::from_str_radix(&ident_s, 10){
                             LexerTokens::new(start.clone(), end, LexerTokenType::Number(num))
                         }
                         else {
@@ -302,14 +334,53 @@ impl LexerTokens {
                         prev = next;
                     }
                 };
+                continue;
+                
+            }
+            else if x.token_type == LexerTokenType::TabSpace {
+                let start = x.pos.start.clone();
+                let mut prev = x;
+                loop {
+
+                    // not checking because it will hit EOF eventually
+                    let next = iter.next().unwrap();
+                    //if next.is_none(){
+                    //    break prev.pos.end.clone();
+                    //}
+                    //let next = next.unwrap();
+
+                    if next.token_type != LexerTokenType::TabSpace{    
+                        let end = next.clone();
+                        
+                        t.push(LexerTokens::new(start, prev.pos.end.clone(), LexerTokenType::TabSpace));
+                        t.push(end);
+                        if next.token_type == LexerTokenType::EOF{
+                            return t;
+                        }
+                        break ;
+
+                    }else {
+                        
+                        prev = next;
+                    }
+                };
+                continue;
                 
             }
             else {
                 t.push(x.clone());
+                continue;
             }
         }
         
     }
+
+    pub fn trim_spaces(v:Vec<Self>) -> Vec<Self>{
+        v.into_iter()
+            .filter(|x| !(x.token_type == LexerTokenType::Space || x.token_type == LexerTokenType::TabSpace) )
+            .collect()
+    }
+
 }
 
 /// unimplemented
@@ -348,16 +419,18 @@ mod test{
         "
         ..,()^+
         .....";
-        let toks = LexerTokens::str_to_token(s);
+        let sss = ""; 
+        let toks = LexerTokens::str_to_token(sss);
         
-        //println!("{toks:#?}");
-        
+        println!("{toks:#?}");
+        /*
         {
-            let tok_out = format!("{toks:#?}");
-            let out_path = "./test_out/lexer_tokens.ron";
-            std::fs::create_dir_all("./test_out").unwrap();
-            std::fs::write(out_path, tok_out).unwrap();
+        let tok_out = format!("{toks:#?}");
+        let out_path = "./test_out/lexer_tokens.ron";
+        std::fs::create_dir_all("./test_out").unwrap();
+        std::fs::write(out_path, tok_out).unwrap();
         }
+        */
     }
 
     #[test]

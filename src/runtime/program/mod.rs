@@ -12,17 +12,17 @@ use thread::PThread;
 #[derive(Debug,Default)]
 pub struct PRegisters{
     /// accumulator     d:1
-    pub eax:usize,
+    pub ra:usize,
     /// base            d:2
-    pub ebx:usize, 
+    pub rb:usize, 
     /// counter         d:3
-    pub ecx:usize,
+    pub rc:usize,
     /// data            d:4
-    pub edx:usize,
+    pub rd:usize,
     /// stack base pointer     d:5 
-    pub ebp:usize,
+    pub rbp:usize,
     /// stack pointer           d:6
-    pub esp:usize,
+    pub rsp:usize,
     //other registers
     pub r1:usize,
     pub r2:usize,

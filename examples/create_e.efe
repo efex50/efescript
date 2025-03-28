@@ -1,4 +1,4 @@
-mov r6, esp ;reads the start of stack
+mov r6, rsp ;reads the start of stack
 push32 0x2E2F6861
 push16 0x6861
 
@@ -6,7 +6,7 @@ push16 0x6861
 mov r2,100
 mov r3,0 ; lenght
 
-mov r1,esp 
+mov r1,rsp 
 sub32 r1,r6
 
 label _loop
@@ -15,12 +15,12 @@ label _loop
 push64 0x6D7573746FC3A70A
 add32 r3,8
 
-sub32 r2,1
+sub32 r2,1  
 test r2
 jnz _loop
 
-mov eax,8
-mov ebx,r1
-mov ecx,r3
-mov edx,r6
+mov ra,8
+mov rb,r1
+mov rc,r3
+mov rd,r6
 syscall

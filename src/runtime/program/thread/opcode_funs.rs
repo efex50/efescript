@@ -1,7 +1,7 @@
 use efepages::page::Page;
 use num_traits::FromPrimitive;
 
-use crate::{as_be_bytes, instruction::{Operands, PtrInner, Registers}, runtime::{program::PRegisters, OperandType, SimpleOperands}};
+use crate::{as_be_bytes, instruction::{Operands, PtrInner, Registers}, nasm_efe::OperandType, runtime::{program::PRegisters, SimpleOperands}};
 
 use super::PThread;
 
@@ -11,12 +11,12 @@ impl PThread {
         match a {
             Operands::Static(s) => *s,
             // Operands::String(_vec) => todo!(),
-            Operands::EAX => self.registers.eax,
-            Operands::EBX => self.registers.ebx,
-            Operands::ECX => self.registers.ecx,
-            Operands::EDX => self.registers.edx,
-            Operands::EBP => self.registers.ebp,
-            Operands::ESP => self.registers.esp,
+            Operands::RA => self.registers.ra,
+            Operands::RB => self.registers.rb,
+            Operands::RC => self.registers.rc,
+            Operands::RD => self.registers.rd,
+            Operands::RBP => self.registers.rbp,
+            Operands::RSP => self.registers.rsp,
             Operands::R1 =>  self.registers.r1,
             Operands::R2 =>  self.registers.r2,
             Operands::R3 =>  self.registers.r3,
@@ -24,36 +24,36 @@ impl PThread {
             Operands::R5 =>  self.registers.r5,
             Operands::R6 =>  self.registers.r6,
             Operands::AL => {
-                let r = self.registers.eax;
+                let r = self.registers.ra;
                 r & 0xff
             },
             Operands::AH => {
-                let r = self.registers.eax;
+                let r = self.registers.ra;
                 (r & 0xff00) >> 8
             },
             Operands::BL => {
-                let r = self.registers.ebx;
+                let r = self.registers.rb;
                 r & 0xff
             },
             Operands::BH => {
-                let r = self.registers.ebx;
+                let r = self.registers.rb;
                 (r & 0xff00) >> 8
     
             },
             Operands::CL => {
-                let r = self.registers.ecx;
+                let r = self.registers.rc;
                 r & 0xff
             },
             Operands::CH => {
-                let r = self.registers.ecx;
+                let r = self.registers.rc;
                 (r & 0xff00) >> 8
             },
             Operands::DL => {
-                let r = self.registers.edx;
+                let r = self.registers.rd;
                 r & 0xff
             },
             Operands::DH => {
-                let r = self.registers.edx;
+                let r = self.registers.rd;
                 (r & 0xff00) >> 8
             },
     
@@ -105,12 +105,12 @@ impl PThread {
     }
     pub(super) fn write_op_data(&mut self,a:&Operands,r:usize){
         match a {
-            Operands::EAX => self.registers.eax = r,
-            Operands::EBX => self.registers.ebx = r,
-            Operands::ECX => self.registers.ecx = r,
-            Operands::EDX => self.registers.edx = r,
-            Operands::EBP => self.registers.ebp = r,
-            Operands::ESP => self.registers.esp = r,
+            Operands::RA => self.registers.ra = r,
+            Operands::RB => self.registers.rb = r,
+            Operands::RC => self.registers.rc = r,
+            Operands::RD => self.registers.rd = r,
+            Operands::RBP => self.registers.rbp = r,
+            Operands::RSP => self.registers.rsp = r,
             Operands::R1 =>  self.registers.r1 = r,
             Operands::R2 =>  self.registers.r2 = r,
             Operands::R3 =>  self.registers.r3 = r,
@@ -155,67 +155,67 @@ impl PThread {
             Operands::Null => todo!(),
             Operands::AL => {
                 let r = r ;
-                let reg = self.registers.eax;
+                let reg = self.registers.ra;
                 let upper = reg & 0xff;
                 let reg2 = reg - upper;
                 let reg3 = reg2 + r;
-                self.registers.eax = reg3;
+                self.registers.ra = reg3;
             },
             Operands::AH => {
                 let r = r <<8;
-                let reg = self.registers.eax;
+                let reg = self.registers.ra;
                 let upper = reg & 0xff00;
                 let reg2 = reg - upper;
                 let reg3 = reg2 + r;
-                self.registers.eax = reg3;
+                self.registers.ra = reg3;
             },
             Operands::BL => {
                 let r = r ;
-                let reg = self.registers.ebx;
+                let reg = self.registers.rb;
                 let upper = reg & 0xff;
                 let reg2 = reg - upper;
                 let reg3 = reg2 + r;
-                self.registers.ebx = reg3
+                self.registers.rb = reg3
             },
             Operands::BH => {
                 let r = r <<8;
-                let reg = self.registers.ebx;
+                let reg = self.registers.rb;
                 let upper = reg & 0xff00;
                 let reg2 = reg - upper;
                 let reg3 = reg2 + r;
-                self.registers.ebx = reg3;
+                self.registers.rb = reg3;
             },
             Operands::CL => {
                 let r = r ;
-                let reg = self.registers.ecx;
+                let reg = self.registers.rc;
                 let upper = reg & 0xff;
                 let reg2 = reg - upper;
                 let reg3 = reg2 + r;
-                self.registers.ecx = reg3;
+                self.registers.rc = reg3;
             },
             Operands::CH => {
                 let r = r <<8;
-                let reg = self.registers.ecx;
+                let reg = self.registers.rc;
                 let upper = reg & 0xff00;
                 let reg2 = reg - upper;
                 let reg3 = reg2 + r;
-                self.registers.ecx = reg3;
+                self.registers.rc = reg3;
             },
             Operands::DL => {
                 let r = r ;
-                let reg = self.registers.edx;
+                let reg = self.registers.rd;
                 let upper = reg & 0xff;
                 let reg2 = reg - upper;
                 let reg3 = reg2 + r;
-                self.registers.edx = reg3;
+                self.registers.rd = reg3;
             },
             Operands::DH => {
                 let r = r <<8;
-                let reg = self.registers.edx;
+                let reg = self.registers.rd;
                 let upper = reg & 0xff00;
                 let reg2 = reg - upper;
                 let reg3 = reg2 + r;
-                self.registers.edx = reg3;
+                self.registers.rd = reg3;
             },
             _ => {
                 println!("{:?}",a);
@@ -244,12 +244,12 @@ fn get_pointer_inner_addr(a:&PtrInner,regs:&PRegisters) -> usize{
 
 fn regtype_to_reg_data(a:&Registers,regs:&PRegisters) -> usize{
     match a {
-        Registers::EAX => regs.eax,
-        Registers::EBX => regs.ebx,
-        Registers::ECX => regs.ecx,
-        Registers::EDX => regs.edx,
-        Registers::EBP => regs.ebp,
-        Registers::ESP => regs.esp,
+        Registers::RA => regs.ra,
+        Registers::RB => regs.rb,
+        Registers::RC => regs.rc,
+        Registers::RD => regs.rd,
+        Registers::RBP => regs.rbp,
+        Registers::RSP => regs.rsp,
         Registers::R1 => regs.r1,
         Registers::R2 => regs.r2,
         Registers::R3 => regs.r3,
@@ -257,36 +257,36 @@ fn regtype_to_reg_data(a:&Registers,regs:&PRegisters) -> usize{
         Registers::R5 => regs.r5,
         Registers::R6 => regs.r6,
         Registers::AL => {
-            let r = regs.eax;
+            let r = regs.ra;
             r | 0xff
         },
         Registers::AH => {
-            let r = regs.eax;
+            let r = regs.ra;
             (r | 0xff00) >> 8
         },
         Registers::BL => {
-            let r = regs.ebx;
+            let r = regs.rb;
             r | 0xff
         },
         Registers::BH => {
-            let r = regs.ebx;
+            let r = regs.rb;
             (r | 0xff00) >> 8
 
         },
         Registers::CL => {
-            let r = regs.ecx;
+            let r = regs.rc;
             r | 0xff
         },
         Registers::CH => {
-            let r = regs.ecx;
+            let r = regs.rc;
             (r | 0xff00) >> 8
         },
         Registers::DL => {
-            let r = regs.edx;
+            let r = regs.rd;
             r | 0xff
         },
         Registers::DH => {
-            let r = regs.edx;
+            let r = regs.rd;
             (r | 0xff00) >> 8
         },
     }

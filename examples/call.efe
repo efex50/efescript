@@ -7,8 +7,8 @@ mov ah, 20
 call _test ; call the test
 
 
-mov eax, 3
-mov ebx, 0
+mov ra, 3
+mov rb, 0
 syscall
 
 
@@ -17,8 +17,7 @@ syscall
 
 
 label _test
-
 ret ; shouldn't be able to syscall here
-mov eax, 3
-mov ebx, 1
+mov ra, 3
+mov rb, 1
 syscall

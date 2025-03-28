@@ -1,7 +1,7 @@
 
 
 
-pub fn as_usize<S:Into<String>>(a:S) -> Option<usize>{
+pub fn as_usize<S:Into<String>>(a:S) -> Result<usize,()>{
     let a:String = a.into();
     let num :Result<usize, std::num::ParseIntError>;
     if a.contains("0b"){
@@ -20,8 +20,8 @@ pub fn as_usize<S:Into<String>>(a:S) -> Option<usize>{
         num = usize::from_str_radix(&a, 10);
     };
     num
-    .map(|a|Some(a))
-    .unwrap_or(None)
+    .map(|a|Ok(a))
+    .unwrap_or(Err(()))
     
 }
 #[allow(unused)]
