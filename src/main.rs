@@ -4,7 +4,6 @@ use efescript::prelude::*;
 
 fn main() 
 {   
-    let mut v: Vec<u8> = Vec::new();
     
 
     let args:Vec<String> = args().map(|d| d).collect();
