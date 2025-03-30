@@ -81,7 +81,7 @@ fn parse_str_to_instructions(str:String) -> Result<Vec<PreCompile>,ParseErr> {
     let mut iter_t = tokens.into_iter();
     loop {
         let tok = iter_t.next().unwrap();
-        dbg!(&tok);
+        //dbg!(&tok);
         match tok.token_type {
             LexerTokenType::EOL => {dbg!("eol");} ,
             LexerTokenType::EOF => {return Ok(program);},
@@ -316,7 +316,7 @@ fn parse_str_to_instructions(str:String) -> Result<Vec<PreCompile>,ParseErr> {
                         OpCodes::Pop64 |
                         OpCodes::Test => {
                             let label = iter_t.next().unwrap();
-                            dbg!(&label);
+                            //dbg!(&label);
                             // handle the unexpected EOF
                             if_eof(&label)?;
                             
@@ -329,7 +329,7 @@ fn parse_str_to_instructions(str:String) -> Result<Vec<PreCompile>,ParseErr> {
                             let typel = parse_operand_types(&operandtag.to_lowercase())
                                 .map_err(|_| ParseErr::WrongOperand(label.token_type.get_inner_str_owned().unwrap(), label.pos.start))?;
 
-                            dbg!(&typel,&ident);
+                            //dbg!(&typel,&ident);
                             let operandl = match typel {
                                 OperandType::Static => Operands::Static(as_usize(operandtag).unwrap()),
                                 OperandType::RA |
@@ -570,7 +570,7 @@ fn if_eof(tok:&LexerTokens) -> Result<(),ParseErr>{
 pub fn parse_str<S:Into<String>>(str:S) -> Result<Vec<u8>,ParseErr> {
     let str:String = str.into();
     let inst = parse_str_to_instructions(str)?;
-    dbg!(&inst);
+    //dbg!(&inst);
 
 
     let mut data = nasm_compiler::Data::from_pre_compile(inst);

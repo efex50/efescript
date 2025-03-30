@@ -1,4 +1,4 @@
-use std::rc::Rc;
+use std::{rc::Rc, str::Chars};
 
 
 
@@ -154,7 +154,7 @@ impl LexerTokens {
     fn to_token_inner(str:&String) -> Vec<LexerTokens>{
         
         let mut str = str.chars();
-
+        dbg!(&str);
         let (mut line,mut column) = (1u64,1u64);
 
         //unsafe 
@@ -170,9 +170,9 @@ impl LexerTokens {
         loop{
             let x = str.next();
             
-            
+            dbg!(&x);        
             //----
-            let get_sym_token = |char:char| -> Option<LexerTokens>{
+            let get_sym_token = |char:char,str:&mut Chars| -> Option<LexerTokens>{
     
                 let token = match char {
                     '+'  => Some(LexerTokens{token_type:LexerTokenType::Plus,pos:Position         { start: LineColmn { line, colmn: column }, end: LineColmn { line, colmn: column+1 } }}),
@@ -194,6 +194,11 @@ impl LexerTokens {
                     '='  => Some(LexerTokens{token_type:LexerTokenType::Equal,pos:Position        { start: LineColmn { line, colmn: column }, end: LineColmn { line, colmn: column+1 } }}),
                     '~'  => Some(LexerTokens{token_type:LexerTokenType::Tilde,pos:Position        { start: LineColmn { line, colmn: column }, end: LineColmn { line, colmn: column+1 } }}),
                     ';'  => Some(LexerTokens{token_type:LexerTokenType::SemiColon,pos:Position    { start: LineColmn { line, colmn: column }, end: LineColmn { line, colmn: column+1 } }}),
+                    '\r' => {
+                        let a = str.next();
+                        dbg!(&char,&a);
+                        Some(LexerTokens{token_type:LexerTokenType::EOL,pos:Position          { start: LineColmn { line, colmn: column }, end: LineColmn { line, colmn: column+1 } }})
+                    },
                     '\n' => Some(LexerTokens{token_type:LexerTokenType::EOL,pos:Position          { start: LineColmn { line, colmn: column }, end: LineColmn { line, colmn: column+1 } }}),
                     '\t' => Some(LexerTokens{token_type:LexerTokenType::TabSpace,pos:Position     { start: LineColmn { line, colmn: column }, end: LineColmn { line, colmn: column+1 } }}),
                     '/'  => Some(LexerTokens{token_type:LexerTokenType::Slash,pos:Position        { start: LineColmn { line, colmn: column }, end: LineColmn { line, colmn: column+1 } }}),
@@ -231,7 +236,7 @@ impl LexerTokens {
             let char = x.unwrap();
             
             
-            if let Some(lt) = get_sym_token(char){
+            if let Some(lt) = get_sym_token(char,&mut str){
                 handle_sym_token_line(&lt);
                 if lt.token_type == LexerTokenType::EOF{
                     tokens.push(lt);
@@ -267,7 +272,7 @@ impl LexerTokens {
                     let char = x.unwrap();
         
 
-                    if let Some(lt) = get_sym_token(char){
+                    if let Some(lt) = get_sym_token(char,&mut str){
                         unsafe {*column_ptr.clone() += 1;}
                         let ident_s = v.into_iter().collect::<String>();
                         //println!("{}",ident_s);
@@ -279,7 +284,7 @@ impl LexerTokens {
                             LexerTokens::new(start.clone(), end, LexerTokenType::Ident(ident_s))
                         };
                         tokens.push(a);
-                        let t = get_sym_token(char).unwrap();
+                        let t = get_sym_token(char,&mut str).unwrap();
                         handle_sym_token_line(&lt);
                         tokens.push(t);
                         break;

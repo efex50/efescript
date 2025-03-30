@@ -1,0 +1,6 @@
+mov rb,rsp
+push64 0x68656C6C6F20776F
+push32 0x726C6421
+mov rc,12
+mov ra,2
+syscall

@@ -19,9 +19,7 @@ fn main()
     let f = parse_from_file(f).unwrap();
     std::fs::write(std::path::Path::new("./out.efec"), &f).unwrap();
     p.load_from_vec(f);
-    dbg!(&p.counter);
     p.run_all_nonstop();
-    dbg!(&p.counter);
     if let Some(x) = args.get(2) {
         match x.as_str(){
             "-d" => println!("{:?}",p),

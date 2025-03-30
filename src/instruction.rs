@@ -5,13 +5,13 @@ use crate::ops::OpCodes;
 
 
 #[derive(Debug)]
-pub(crate) struct Instuction{
+pub struct Instuction{
     pub opcode:OpCodes,
     pub operandl:Operands,
     pub operandr:Operands,
 }
 #[derive(Debug, PartialEq, Eq)]
-pub(crate) enum Operands{
+pub enum Operands{
     Static(usize),
     // String(Vec<u8>),//todo
     Label(String),
@@ -45,7 +45,7 @@ pub(crate) enum Operands{
 
 
 #[derive(Debug, PartialEq, Eq)]
-pub(crate) enum PtrInner{
+pub enum PtrInner{
     Static(usize),
     Reg(Registers),
     Sum(Registers,usize),
@@ -57,7 +57,7 @@ pub(crate) enum PtrInner{
 
 
 #[derive(Debug, PartialEq, Eq)]
-pub(crate) enum Registers{
+pub enum Registers{
     RA,
     RB,
     RC,
