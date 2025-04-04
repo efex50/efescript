@@ -8,12 +8,13 @@ use num_traits::ToPrimitive;
 
 pub mod nasm_compiler;
 pub mod nasm_funs;
+pub mod linker;
 
 
 
 
 #[derive(Debug)]
-pub(crate) enum PreCompile{
+pub enum PreCompile{
     I(Instuction),
     L(String)
 }
@@ -78,12 +79,15 @@ pub enum ParseErr{
 fn parse_str_to_instructions(str:String) -> Result<Vec<PreCompile>,ParseErr> {
     let tokens = LexerTokens::trim_spaces(LexerTokens::string_to_token(&str));
     let mut program: Vec<PreCompile> = Vec::new();
+        
     let mut iter_t = tokens.into_iter();
     loop {
         let tok = iter_t.next().unwrap();
         //dbg!(&tok);
         match tok.token_type {
-            LexerTokenType::EOL => {dbg!("eol");} ,
+            LexerTokenType::EOL => {
+                //dbg!("eol");
+            } ,
             LexerTokenType::EOF => {return Ok(program);},
             LexerTokenType::Ident(ident) => {
                 let ident = ident.to_lowercase();
@@ -215,12 +219,13 @@ fn parse_str_to_instructions(str:String) -> Result<Vec<PreCompile>,ParseErr> {
                                 return Err(ParseErr::WrongOpCode(format!("{:?}",label.token_type),label.pos.start));
                             }else{
 
-                            
+                                //dbg!(&label.token_type.get_inner_str());
+                                let inner = label.token_type.get_inner_str().unwrap().to_string();
+                                
                                 let typer = parse_operand_types(label.token_type.get_inner_str().unwrap().to_lowercase())
                                     .map_err(|_| ParseErr::WrongOperand(label.token_type.get_inner_str_owned().unwrap(), label.pos.start))?;
-
                                 match typer {
-                                    OperandType::Static => Operands::Static(as_usize(ident).unwrap()),
+                                    OperandType::Static => Operands::Static(as_usize(inner).unwrap()),
                                     OperandType::RA |
                                     OperandType::RB |
                                     OperandType::RC |

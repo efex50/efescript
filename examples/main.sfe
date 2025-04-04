@@ -1,6 +1,6 @@
 
 
 
-void main(){
+fn main() -> i32{
     
 }

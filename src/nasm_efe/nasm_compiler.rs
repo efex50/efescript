@@ -60,7 +60,7 @@ impl Data {
                     }
                     _ => {
                         let len = inst.get_len();
-                        v.push(Objects::Instruction { i: inst, len: len });
+                        v.push(Objects::Instruction { i: inst, len });
                     }
                 },
                 PreCompile::L(l) => {

@@ -112,25 +112,27 @@ pub struct LexerTokens{
     pub pos:Position
 } 
 
+type EndResult = Vec<LexerTokens>;
 impl LexerTokens {
+
 
     pub fn len(&self) -> u64{
         let len = self.pos.end.colmn - self.pos.start.colmn;
         len
     }
 
-    pub fn str_to_token<S:Into<String>>(str:S) -> Vec<Self>{
+    pub fn str_to_token<S:Into<String>>(str:S) -> EndResult{
         let str:String = str.into();
         let tokens = Self::get_tokens_merged(&str);
         return tokens; 
     }
-    pub fn string_to_token(str:&String) -> Vec<Self>{
+    pub fn string_to_token(str:&String) -> EndResult{
         let tokens = Self::get_tokens_merged(str);
         return tokens; 
     }
 
     // does the space merging
-    fn get_tokens_merged(str:&String) -> Vec<Self>{
+    fn get_tokens_merged(str:&String) -> EndResult{
         let tokens = Self::to_token_inner(str); 
         // println!("{:?}",tokens);
         let tokens = Self::merge_spaces(tokens);
@@ -149,12 +151,25 @@ impl LexerTokens {
         };
     }
 
+    fn to_token_innerv2(str:&String) -> EndResult{
+        let (mut line_pos,mut column_pos) = (1u64,1u64);
+        let line_ptr = &mut line_pos as *mut u64 ;
+        let column_ptr = &mut column_pos as *mut u64;
+        let mut tokens:EndResult = Vec::new();
+
+        let lines = str.lines();
+        for x in lines{
+            let iter_s = x.chars().peekable().pee;
+        }
 
 
-    fn to_token_inner(str:&String) -> Vec<LexerTokens>{
+        tokens
+    }
+
+    fn to_token_inner(str:&String) -> EndResult{
         
         let mut str = str.chars();
-        dbg!(&str);
+        //dbg!(&str);
         let (mut line,mut column) = (1u64,1u64);
 
         //unsafe 
@@ -170,7 +185,7 @@ impl LexerTokens {
         loop{
             let x = str.next();
             
-            dbg!(&x);        
+            //dbg!(&x);        
             //----
             let get_sym_token = |char:char,str:&mut Chars| -> Option<LexerTokens>{
     
@@ -194,11 +209,6 @@ impl LexerTokens {
                     '='  => Some(LexerTokens{token_type:LexerTokenType::Equal,pos:Position        { start: LineColmn { line, colmn: column }, end: LineColmn { line, colmn: column+1 } }}),
                     '~'  => Some(LexerTokens{token_type:LexerTokenType::Tilde,pos:Position        { start: LineColmn { line, colmn: column }, end: LineColmn { line, colmn: column+1 } }}),
                     ';'  => Some(LexerTokens{token_type:LexerTokenType::SemiColon,pos:Position    { start: LineColmn { line, colmn: column }, end: LineColmn { line, colmn: column+1 } }}),
-                    '\r' => {
-                        let a = str.next();
-                        dbg!(&char,&a);
-                        Some(LexerTokens{token_type:LexerTokenType::EOL,pos:Position          { start: LineColmn { line, colmn: column }, end: LineColmn { line, colmn: column+1 } }})
-                    },
                     '\n' => Some(LexerTokens{token_type:LexerTokenType::EOL,pos:Position          { start: LineColmn { line, colmn: column }, end: LineColmn { line, colmn: column+1 } }}),
                     '\t' => Some(LexerTokens{token_type:LexerTokenType::TabSpace,pos:Position     { start: LineColmn { line, colmn: column }, end: LineColmn { line, colmn: column+1 } }}),
                     '/'  => Some(LexerTokens{token_type:LexerTokenType::Slash,pos:Position        { start: LineColmn { line, colmn: column }, end: LineColmn { line, colmn: column+1 } }}),
@@ -261,7 +271,7 @@ impl LexerTokens {
                                 LexerTokens::new(start.clone(), end, LexerTokenType::Number(num))
                             }
                             else {
-                                LexerTokens::new(start.clone(), end, LexerTokenType::Ident(ident_s))
+                                LexerTokens::new(start.clone(), end, LexerTokenType::Ident(ident_s.trim().parse().unwrap()))
                             };
                             tokens.push(a);
     
@@ -281,7 +291,7 @@ impl LexerTokens {
                             LexerTokens::new(start.clone(), end, LexerTokenType::Number(num))
                         }
                         else {
-                            LexerTokens::new(start.clone(), end, LexerTokenType::Ident(ident_s))
+                            LexerTokens::new(start.clone(), end, LexerTokenType::Ident(ident_s.trim().parse().unwrap()))
                         };
                         tokens.push(a);
                         let t = get_sym_token(char,&mut str).unwrap();
@@ -301,7 +311,7 @@ impl LexerTokens {
         return tokens;
     }
 
-    fn merge_spaces(v:Vec<Self>) -> Vec<Self>{
+    fn merge_spaces(v:EndResult) -> EndResult{
         let mut t = Vec::new();
         let mut iter = v.iter();
         loop{
@@ -380,7 +390,7 @@ impl LexerTokens {
         
     }
 
-    pub fn trim_spaces(v:Vec<Self>) -> Vec<Self>{
+    pub fn trim_spaces(v:EndResult) -> EndResult{
         v.into_iter()
             .filter(|x| !(x.token_type == LexerTokenType::Space || x.token_type == LexerTokenType::TabSpace) )
             .collect()

@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use num_traits::ToPrimitive;
 
 use crate::{compiler::ast::lexer::{LexerTokenType, LexerTokens}, funs::{as_usize, trim_zeroes}, instruction::{Operands, PtrInner, Registers}, ops::OpCodes};
@@ -27,8 +29,8 @@ impl PtrInner {
             PtrInnerState::Single => {
                 let tag = t[0].token_type.get_inner_str().unwrap();
                 match Registers::from_str(tag){
-                    Some(so) => return  Ok(Self::Reg(so)),
-                    None => {
+                    Ok(so) => return  Ok(Self::Reg(so)),
+                    Err(_) => {
                         let num = as_usize(tag);
                         return num
                             .map(|a| Self::Static(a))
@@ -49,26 +51,26 @@ impl PtrInner {
                 let tokr = t[2].token_type.get_inner_str().unwrap();
                 
                 match Registers::from_str(tokl) {
-                    Some(sol) => {
+                    Ok(sol) => {
                         match Registers::from_str(tokr) {
-                            Some(sor) => {
+                            Ok(sor) => {
                                 return Ok(Self::SumReg(sol, sor));
                             },
-                            None => {
+                            Err(_) => {
                                 let num = as_usize(tokr).unwrap();
                                 return Ok(Self::Sum(sol, num));
                             },
                         };
                     },
-                    None => {
+                    Err(_) => {
                         match Registers::from_str(tokr) {
-                            Some(so) => {
+                            Ok(so) => {
                                 let num = as_usize(tokl);
                                 return num
                                     .map(|a| Self::Sum(so, a))
                                     .map_err(|_| ParseErr::WrongPtrInner(t[2].pos.start.clone()));
                             },
-                            None => {
+                            Err(_) => {
                                 let numl = as_usize(tokl)
                                     .map_err(|_| ParseErr::WrongPtrInner(t[0].pos.start.clone()))?;
                                 let numr = as_usize(tokr)
@@ -92,26 +94,26 @@ impl PtrInner {
                 let tokr = t[2].token_type.get_inner_str().unwrap();
                 
                 match Registers::from_str(tokl) {
-                    Some(sol) => {
+                    Ok(sol) => {
                         match Registers::from_str(tokr) {
-                            Some(sor) => {
+                            Ok(sor) => {
                                 return Ok(Self::ExtReg(sol, sor));
                             },
-                            None => {
+                            Err(_) => {
                                 let num = as_usize(tokr).unwrap();
                                 return Ok(Self::Ext(sol, num));
                             },
                         };
                     },
-                    None => {
+                    Err(_) => {
                         match Registers::from_str(tokr) {
-                            Some(so) => {
+                            Ok(so) => {
                                 let num = as_usize(tokl);
                                 return num
                                     .map(|a| Self::Extr(a, so))
                                     .map_err(|_| ParseErr::WrongPtrInner(t[2].pos.start.clone()));
                             },
-                            None => {
+                            Err(_) => {
                                 let numl = as_usize(tokl)
                                     .map_err(|_| ParseErr::WrongPtrInner(t[0].pos.start.clone()))?;
                                 let numr = as_usize(tokr)
@@ -130,36 +132,75 @@ impl PtrInner {
 
 }
 
-impl Registers {
-    pub fn from_str<S:Into<String>>(data:S) -> Option<Self>{
-        let d:String = data.into();
-        let d = d.to_lowercase();
-        match d.as_str() {
-            "ra"  => Some(Self::RA),
-            "rb"  => Some(Self::RB),
-            "rc"  => Some(Self::RC),
-            "rd"  => Some(Self::RD),
-            "rsp" => Some(Self::RSP),
-            "rbp" => Some(Self::RBP),
-            "r1"  => Some(Self::R1),
-            "r2"  => Some(Self::R2),
-            "r3"  => Some(Self::R3),
-            "r4"  => Some(Self::R4),
-            "r5"  => Some(Self::R5),
-            "r6"  => Some(Self::R6),
-            "al"  => Some(Self::AL),
-            "ah"  => Some(Self::AH),
-            "bl"  => Some(Self::BL),
-            "bh"  => Some(Self::BH),
-            "cl"  => Some(Self::CL),
-            "ch"  => Some(Self::CH),
-            "dl"  => Some(Self::DL),
-            "dh"  => Some(Self::DH),
 
-            _ => None
+
+
+impl FromStr for Registers {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "ra"  => Ok(Self::RA),
+            "rb"  => Ok(Self::RB),
+            "rc"  => Ok(Self::RC),
+            "rd"  => Ok(Self::RD),
+            "rsp" => Ok(Self::RSP),
+            "rbp" => Ok(Self::RBP),
+            "r1"  => Ok(Self::R1),
+            "r2"  => Ok(Self::R2),
+            "r3"  => Ok(Self::R3),
+            "r4"  => Ok(Self::R4),
+            "r5"  => Ok(Self::R5),
+            "r6"  => Ok(Self::R6),
+            "al"  => Ok(Self::AL),
+            "ah"  => Ok(Self::AH),
+            "bl"  => Ok(Self::BL),
+            "bh"  => Ok(Self::BH),
+            "cl"  => Ok(Self::CL),
+            "ch"  => Ok(Self::CH),
+            "dl"  => Ok(Self::DL),
+            "dh"  => Ok(Self::DH),
+
+            _ => Err(())
+
         }
-    
     }
+}
+
+impl TryFrom<OperandType> for Registers{
+    type Error = ();
+    fn try_from(value: OperandType) -> Result<Self,Self::Error> {
+        match value {
+            OperandType::RA => Ok(Self::RA),
+            OperandType::RB => Ok(Self::RB),
+            OperandType::RC => Ok(Self::RC),
+            OperandType::RD => Ok(Self::RD),
+            OperandType::RBP => Ok(Self::RBP),
+            OperandType::RSP => Ok(Self::RSP),
+            OperandType::R1 => Ok(Self::R1),
+            OperandType::R2 => Ok(Self::R2),
+            OperandType::R3 => Ok(Self::R3),
+            OperandType::R4 => Ok(Self::R4),
+            OperandType::R5 => Ok(Self::R5),
+            OperandType::R6 => Ok(Self::R6),
+            OperandType::AL => Ok(Self::AL),
+            OperandType::AH => Ok(Self::AH),
+            OperandType::BL => Ok(Self::BL),
+            OperandType::BH => Ok(Self::BH),
+            OperandType::CL => Ok(Self::CL),
+            OperandType::CH => Ok(Self::CH),
+            OperandType::DL => Ok(Self::DL),
+            OperandType::DH => Ok(Self::DH),
+            _=> Err(()),
+        }
+    }
+    
+    
+}
+
+
+
+impl Registers {
     pub fn to_operand(&self) -> OperandType{
         match self {
             Registers::RA  => OperandType::RA,
