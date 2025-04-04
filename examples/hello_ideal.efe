@@ -1,0 +1,15 @@
+
+section .data
+    msg: db "hello world!"
+
+
+section .program
+    global _start
+
+label _start
+    mov rb,rsp ; save the stack pointer which beginning of string
+    push64 0x68656C6C6F20776F ; push the hello world. todo for string
+    push32 0x726C6421
+    mov rc,12 ; len of str
+    mov ra,2 ; syscall id
+    syscall ; call the println syscall
