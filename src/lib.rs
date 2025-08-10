@@ -4,6 +4,7 @@ pub(crate)mod ops;
 pub(crate)mod macros;
 pub(crate)mod funs;
 pub(crate)mod syscalls;
+pub(crate)mod instruction;
 pub mod nasm_efe;
 pub(crate)mod runtime;
 pub mod compiler;

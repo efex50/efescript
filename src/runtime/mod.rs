@@ -3,6 +3,7 @@ pub(super)  mod data_funs;
 // todo
 #[allow(dead_code)]
 pub mod program;
+pub mod allocator;
 
 use crate::{nasm_efe::OperandType, *};
 use nasm_efe::nasm_funs::parse_register_type_to_op;
