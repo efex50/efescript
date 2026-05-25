@@ -195,13 +195,13 @@ impl LexerTokens {
                     '~'  => Some(LexerTokens{token_type:LexerTokenType::Tilde,pos:Position        { start: LineColmn { line, colmn: column }, end: LineColmn { line, colmn: column+1 } }}),
                     ';'  => Some(LexerTokens{token_type:LexerTokenType::SemiColon,pos:Position    { start: LineColmn { line, colmn: column }, end: LineColmn { line, colmn: column+1 } }}),
                     '\n' => Some(LexerTokens{token_type:LexerTokenType::EOL,pos:Position          { start: LineColmn { line, colmn: column }, end: LineColmn { line, colmn: column+1 } }}),
+                    '\r' => Some(LexerTokens{token_type:LexerTokenType::Space,pos:Position        { start: LineColmn { line, colmn: column }, end: LineColmn { line, colmn: column+1 } }}),
                     '\t' => Some(LexerTokens{token_type:LexerTokenType::TabSpace,pos:Position     { start: LineColmn { line, colmn: column }, end: LineColmn { line, colmn: column+1 } }}),
                     '/'  => Some(LexerTokens{token_type:LexerTokenType::Slash,pos:Position        { start: LineColmn { line, colmn: column }, end: LineColmn { line, colmn: column+1 } }}),
                     '"'  => Some(LexerTokens{token_type:LexerTokenType::DQuote,pos:Position       { start: LineColmn { line, colmn: column }, end: LineColmn { line, colmn: column+1 } }}),
                     '\'' => Some(LexerTokens{token_type:LexerTokenType::Quote,pos:Position        { start: LineColmn { line, colmn: column }, end: LineColmn { line, colmn: column+1 } }}),
                     ' '  => Some(LexerTokens{token_type:LexerTokenType::Space,pos:Position        { start: LineColmn { line, colmn: column }, end: LineColmn { line, colmn: column+1 } }}),
                     '`'  => Some(LexerTokens{token_type:LexerTokenType::TildeQuote,pos:Position   { start: LineColmn { line, colmn: column }, end: LineColmn { line, colmn: column+1 } }}),
-                    
                     _ => None,
                 };
                 

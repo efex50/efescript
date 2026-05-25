@@ -8,21 +8,28 @@ use super::{OperandType, ParseErr};
 
 enum PtrInnerState{
     Single,
-    Sum,
-    Ext,
+    /// true = Summmary, else Extraction
+    SumOrExt(bool),
 }
+
+enum PtrInnerData{
+    Reg(Registers),
+    Num(usize),
+}
+
 impl PtrInner {
     pub fn from_tokens(t:Vec<LexerTokens>) -> Result<Self,ParseErr>{
+        // efecalc ile tekrardan düzenlenip sadeleştirilmesi gerek
         let state = if t.len() == 1 {
             PtrInnerState::Single
         }else if t[1].token_type == LexerTokenType::Plus {
-            PtrInnerState::Sum
+            PtrInnerState::SumOrExt(true)
         }else if t[1].token_type == LexerTokenType::Minus{
-            PtrInnerState::Ext
+            PtrInnerState::SumOrExt(false)
         }else{
-            return Err(ParseErr::WrongPtrInner(t[1].pos.start.clone()));
+            return Err(ParseErr::WrongPtrInner("Undefined operand in ptrinner".to_string(),t[1].pos.start.clone()));
         };
-
+        
         match state {
             PtrInnerState::Single => {
                 let tag = t[0].token_type.get_inner_str().unwrap();
@@ -32,95 +39,60 @@ impl PtrInner {
                         let num = as_usize(tag);
                         return num
                             .map(|a| Self::Static(a))
-                            .map_err(|_| ParseErr::WrongPtrInner(t[0].pos.start.clone()))
+                            .map_err(|_| ParseErr::WrongPtrInner("Error while parsing the number".to_string(),t[0].pos.start.clone()))
                             ;
                     },
                 };
     
 
             },
-            PtrInnerState::Sum => {
-                let tokl = t[0].token_type.get_inner_str();
-                if tokl.is_none(){return Err(ParseErr::WrongPtrInner(t[0].pos.start.clone()));}
-                let tokl = t[0].token_type.get_inner_str().unwrap();
-                
-                let tokr = t[2].token_type.get_inner_str();
-                if tokr.is_none(){return Err(ParseErr::WrongPtrInner(t[2].pos.start.clone()));}
-                let tokr = t[2].token_type.get_inner_str().unwrap();
-                
-                match Registers::from_str(tokl) {
-                    Some(sol) => {
-                        match Registers::from_str(tokr) {
-                            Some(sor) => {
-                                return Ok(Self::SumReg(sol, sor));
-                            },
-                            None => {
-                                let num = as_usize(tokr).unwrap();
-                                return Ok(Self::Sum(sol, num));
-                            },
-                        };
-                    },
-                    None => {
-                        match Registers::from_str(tokr) {
-                            Some(so) => {
-                                let num = as_usize(tokl);
-                                return num
-                                    .map(|a| Self::Sum(so, a))
-                                    .map_err(|_| ParseErr::WrongPtrInner(t[2].pos.start.clone()));
-                            },
-                            None => {
-                                let numl = as_usize(tokl)
-                                    .map_err(|_| ParseErr::WrongPtrInner(t[0].pos.start.clone()))?;
-                                let numr = as_usize(tokr)
-                                .map_err(|_| ParseErr::WrongPtrInner(t[0].pos.start.clone()))?;
-                                
-                                return Ok(Self::Static(numl + numr))
-                            },
-                        };
-                    },
-                }
-    
+            PtrInnerState::SumOrExt(_type) => {
 
-            },
-            PtrInnerState::Ext => {
-                let tokl = t[0].token_type.get_inner_str();
-                if tokl.is_none(){return Err(ParseErr::WrongPtrInner(t[0].pos.start.clone()));}
-                let tokl = t[0].token_type.get_inner_str().unwrap();
-                
-                let tokr = t[2].token_type.get_inner_str();
-                if tokr.is_none(){return Err(ParseErr::WrongPtrInner(t[2].pos.start.clone()));}
-                let tokr = t[2].token_type.get_inner_str().unwrap();
-                
-                match Registers::from_str(tokl) {
-                    Some(sol) => {
-                        match Registers::from_str(tokr) {
-                            Some(sor) => {
-                                return Ok(Self::ExtReg(sol, sor));
-                            },
-                            None => {
-                                let num = as_usize(tokr).unwrap();
-                                return Ok(Self::Ext(sol, num));
-                            },
-                        };
-                    },
-                    None => {
-                        match Registers::from_str(tokr) {
-                            Some(so) => {
-                                let num = as_usize(tokl);
-                                return num
-                                    .map(|a| Self::Extr(a, so))
-                                    .map_err(|_| ParseErr::WrongPtrInner(t[2].pos.start.clone()));
-                            },
-                            None => {
-                                let numl = as_usize(tokl)
-                                    .map_err(|_| ParseErr::WrongPtrInner(t[0].pos.start.clone()))?;
-                                let numr = as_usize(tokr)
-                                .map_err(|_| ParseErr::WrongPtrInner(t[0].pos.start.clone()))?;
-                                
-                                return Ok(Self::Static(numl - numr))
-                            },
-                        };
-                    },
+
+                // yeni sistem
+                let token_left = if let LexerTokenType::Ident(id) = &t[0].token_type {
+                    let reg = if let Some(a) = Registers::from_str(id) {
+                        a
+                    }else {
+                        return Err(ParseErr::WrongPtrInner("Undefined register".to_string(),t[0].pos.start.clone()));
+                    };
+                    PtrInnerData::Reg(reg)
+                } else if let LexerTokenType::Number(num) = &t[0].token_type {
+                    let number = *num as usize;
+                    PtrInnerData::Num(number)
+                }else {
+                    panic!("ptrinner value is not an register or number")
+                };
+
+                let token_right = if let LexerTokenType::Ident(id) = &t[0].token_type {
+                    let reg = if let Some(a) = Registers::from_str(id) {
+                        a
+                    }else {
+                        return Err(ParseErr::WrongPtrInner("Undefined register".to_string(),t[0].pos.start.clone()));
+                    };
+                    PtrInnerData::Reg(reg)
+                } else if let LexerTokenType::Number(num) = &t[0].token_type {
+                    let number = *num as usize;
+                    PtrInnerData::Num(number)
+                }else {
+                    panic!("ptrinner value is not an register or number")
+                };
+                if _type {
+                    //sum type
+                    match (token_left,token_right) {
+                        (PtrInnerData::Reg(registers1), PtrInnerData::Reg(registers2)) => return Ok(Self::SumReg(registers1, registers2)),
+                        (PtrInnerData::Reg(registers), PtrInnerData::Num(num)) |
+                        (PtrInnerData::Num(num), PtrInnerData::Reg(registers)) => return Ok(PtrInner::Sum(registers, num)),
+                        (PtrInnerData::Num(num1), PtrInnerData::Num(num2)) => return Ok(PtrInner::Static(num1 + num2)),
+                    }
+                }else {
+                    // ext type
+                    match (token_left,token_right) {
+                        (PtrInnerData::Reg(registers1), PtrInnerData::Reg(registers2)) => return Ok(Self::ExtReg(registers1, registers2)),
+                        (PtrInnerData::Reg(registers), PtrInnerData::Num(num)) => return Ok(PtrInner::Ext(registers, num)),
+                        (PtrInnerData::Num(num), PtrInnerData::Reg(registers)) => return Ok(PtrInner::Extr(num, registers)),
+                        (PtrInnerData::Num(num1), PtrInnerData::Num(num2)) => return Ok(PtrInner::Static(num1 - num2)),
+                    }
                 }
 
             },

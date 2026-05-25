@@ -1,0 +1,16 @@
+mov rbp,rsp
+
+;çalışıyor
+push64 0x68656c6c6f20776f
+push32 0x726c6421
+
+
+;çalışmıyor
+mov QWORDPTR [rbp+0] ,0x68656c6c6f20776f
+mov DWORDPTR [rbp+8] ,0x726c6421
+
+
+mov ra, 2
+mov rb, rbp
+mov rc, 12
+syscall

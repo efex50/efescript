@@ -30,9 +30,11 @@ impl PThread{
                 print!("{} ",str);
             },
             SysCalls::Println => {
+                
                 let start = self.registers.rb;
                 let len = self.registers.rc;
                 let str = prg.read(start, len);
+                dbg!(&str);
                 let str = String::from_utf8(str).unwrap();
                 println!("{}",str);
             },

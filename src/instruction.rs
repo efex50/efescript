@@ -19,7 +19,9 @@ pub(crate) enum Operands{
     RB,
     RC,
     RD,
+    // base pointer 
     RBP,
+    // stack pointer
     RSP,
     R1,
     R2,
