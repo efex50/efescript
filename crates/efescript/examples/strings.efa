@@ -1,0 +1,80 @@
+; strings.efa - db strings and escapes, NAME.len, byte loads, a slice, and dw/dd/dq tables.
+; Run from the crate dir:  cargo run -q -p efescript -- run examples/strings.efa
+; Expected output (12 lines):
+;   hello
+;   h-e-l-l-o-
+;   ell
+;   say "hi" \ A
+;   5
+;   1000
+;   -2
+;   65535
+;   100000
+;   -3
+;   1234567890123
+;   -5
+; Exit code: 0
+;
+; Data starts at address 1024 and each item is 8-byte aligned. `word.len` is 5.
+; Bytes are read with i32.load8_u from a computed address; the slice is word + 1, length 3.
+; Table values are read back with sign- or zero-extending loads of the matching width.
+
+import std.print(i64, i64)
+import std.println(i64, i64)
+import std.print_i64(i64)
+import std.print_char(i32)
+
+word    db "hello"
+quoted  db "say \"hi\" \\ \x41"
+table16 dw 1000, -2, 65535
+table32 dd 100000, -3
+table64 dq 1234567890123, -5
+
+fn show(v: i64) {
+    call std.print_i64(v)
+    call std.print_char('\n')
+    ret
+}
+
+export fn main() {
+    reg i, t, b, p, v
+    call std.println(word, word.len)
+
+    ; each byte, followed by a dash
+    const.i64 i, 0
+next:
+    i64.ge_u t, i, word.len
+    br_if t, bytes_done
+    i64.add p, word, i
+    i32.load8_u b, p
+    call std.print_char(b)
+    call std.print_char('-')
+    i64.add i, i, 1
+    jmp next
+bytes_done:
+    call std.print_char('\n')
+
+    ; a slice: three bytes starting at word + 1
+    i64.add p, word, 1
+    call std.print(p, 3)
+    call std.print_char('\n')
+
+    call std.println(quoted, quoted.len)
+    call show(word.len)
+
+    i64.load16_u v, table16, 0
+    call show(v)                        ; 1000
+    i64.load16_s v, table16, 2
+    call show(v)                        ; -2
+    i64.load16_u v, table16, 4
+    call show(v)                        ; 65535
+    i64.load32_s v, table32, 0
+    call show(v)                        ; 100000
+    i64.load32_s v, table32, 4
+    call show(v)                        ; -3
+    i64.load v, table64, 0
+    call show(v)                        ; 1234567890123
+    i64.load v, table64, 8
+    call show(v)                        ; -5
+    ret
+}

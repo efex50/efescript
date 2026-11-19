@@ -1,0 +1,30 @@
+; sound.efa - std.play_sound on a file, status reported as main's exit code.
+; Run from the crate dir:  cargo run -q -p efescript -- run examples/sound.efa
+; Expected output with the `audio` feature (1 line):
+;   sound ok
+; Exit code: 0
+; Expected output in the default build (no `audio` feature; the host returns 1):
+;   sound failed
+; Exit code: 1
+;
+; The path is relative to the working directory, so run it from the crate directory.
+; `play_sound` returns 0 when playback succeeded and 1 when it failed. `main` returns that
+; status as its i32 result, which becomes the process exit code.
+
+import std.play_sound(i64, i64) -> i32
+import std.println(i64, i64)
+
+path   db "examples/ominous_worse.ogg"
+ok_msg db "sound ok"
+bad_msg db "sound failed"
+
+export fn main() -> i32 {
+    reg st
+    call std.play_sound(path, path.len) -> st
+    br_if st, failed
+    call std.println(ok_msg, ok_msg.len)
+    ret st
+failed:
+    call std.println(bad_msg, bad_msg.len)
+    ret st
+}

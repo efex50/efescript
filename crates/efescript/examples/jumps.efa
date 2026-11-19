@@ -1,0 +1,243 @@
+; jumps.efa - every comparison and branch form on i64 and i32, plus eqz, br_if, br_ifz,
+; jmp, br_table (in range and default) and select.
+; Run from the crate dir:  cargo run -q -p efescript -- run examples/jumps.efa
+; Expected output (every line, 57 lines):
+;   i64
+;   eq taken
+;   eq not taken
+;   ne taken
+;   ne not taken
+;   lt_s taken
+;   lt_s not taken
+;   lt_u taken
+;   lt_u not taken
+;   gt_s taken
+;   gt_s not taken
+;   gt_u taken
+;   gt_u not taken
+;   le_s taken
+;   le_s not taken
+;   le_u taken
+;   le_u not taken
+;   ge_s taken
+;   ge_s not taken
+;   ge_u taken
+;   ge_u not taken
+;   eqz taken
+;   eqz not taken
+;   i32
+;   eq taken
+;   eq not taken
+;   ne taken
+;   ne not taken
+;   lt_s taken
+;   lt_s not taken
+;   lt_u taken
+;   lt_u not taken
+;   gt_s taken
+;   gt_s not taken
+;   gt_u taken
+;   gt_u not taken
+;   le_s taken
+;   le_s not taken
+;   le_u taken
+;   le_u not taken
+;   ge_s taken
+;   ge_s not taken
+;   ge_u taken
+;   ge_u not taken
+;   eqz taken
+;   eqz not taken
+;   branches
+;   br_if taken
+;   br_if not taken
+;   br_ifz taken
+;   br_ifz not taken
+;   jmp taken
+;   select: 1
+;   select: -1
+;   br_table 1 in range
+;   br_table 0 in range
+;   br_table default
+; Exit code: 0
+;
+; Operands: a = -1 and c = -1 (i64 and i32), b = 1 and d = 1. Signed, -1 < 1; unsigned,
+; 0xFFFF.. (or 0xFFFFFFFF) > 1. Each comparison is checked once with a taken operand order
+; and once with a not-taken one. `report` branches with br_if, `report_z` with br_ifz.
+
+import std.print(i64, i64)
+import std.println(i64, i64)
+import std.print_i64(i64)
+import std.print_char(i32)
+
+h64    db "i64"
+h32    db "i32"
+hbr    db "branches"
+s_t    db " taken"
+s_n    db " not taken"
+s_jmp  db "jmp taken"
+s_bad  db "BUG: jmp fell through"
+s_sel  db "select: "
+s_bt0  db "br_table 0 in range"
+s_bt1  db "br_table 1 in range"
+s_btd  db "br_table default"
+n_eq   db "eq"
+n_ne   db "ne"
+n_lts  db "lt_s"
+n_ltu  db "lt_u"
+n_gts  db "gt_s"
+n_gtu  db "gt_u"
+n_les  db "le_s"
+n_leu  db "le_u"
+n_ges  db "ge_s"
+n_geu  db "ge_u"
+n_eqz  db "eqz"
+n_brif db "br_if"
+n_brz  db "br_ifz"
+
+; prints "NAME taken" when c is nonzero (br_if), else "NAME not taken"
+fn report(c: i32, name: i64, len: i64) {
+    br_if c, yes
+    call std.print(name, len)
+    call std.println(s_n, s_n.len)
+    ret
+yes:
+    call std.print(name, len)
+    call std.println(s_t, s_t.len)
+    ret
+}
+
+; prints "NAME taken" when c is zero (br_ifz), else "NAME not taken"
+fn report_z(c: i32, name: i64, len: i64) {
+    br_ifz c, zero
+    call std.print(name, len)
+    call std.println(s_n, s_n.len)
+    ret
+zero:
+    call std.print(name, len)
+    call std.println(s_t, s_t.len)
+    ret
+}
+
+; t must be taken, u must be not taken
+fn report2(t: i32, u: i32, name: i64, len: i64) {
+    call report(t, name, len)
+    call report(u, name, len)
+    ret
+}
+
+fn dispatch(k: i32) {
+    br_table k, [bt0, bt1], btd
+bt0:
+    call std.println(s_bt0, s_bt0.len)
+    ret
+bt1:
+    call std.println(s_bt1, s_bt1.len)
+    ret
+btd:
+    call std.println(s_btd, s_btd.len)
+    ret
+}
+
+export fn main() {
+    reg a, b, c, d, t, u, r
+    const.i64 a, -1
+    const.i64 b, 1
+    const.i32 c, -1
+    const.i32 d, 1
+
+    call std.println(h64, h64.len)
+    i64.eq t, a, a
+    i64.eq u, a, b
+    call report2(t, u, n_eq, n_eq.len)
+    i64.ne t, a, b
+    i64.ne u, a, a
+    call report2(t, u, n_ne, n_ne.len)
+    i64.lt_s t, a, b
+    i64.lt_s u, b, a
+    call report2(t, u, n_lts, n_lts.len)
+    i64.lt_u t, b, a
+    i64.lt_u u, a, b
+    call report2(t, u, n_ltu, n_ltu.len)
+    i64.gt_s t, b, a
+    i64.gt_s u, a, b
+    call report2(t, u, n_gts, n_gts.len)
+    i64.gt_u t, a, b
+    i64.gt_u u, b, a
+    call report2(t, u, n_gtu, n_gtu.len)
+    i64.le_s t, a, b
+    i64.le_s u, b, a
+    call report2(t, u, n_les, n_les.len)
+    i64.le_u t, b, a
+    i64.le_u u, a, b
+    call report2(t, u, n_leu, n_leu.len)
+    i64.ge_s t, b, a
+    i64.ge_s u, a, b
+    call report2(t, u, n_ges, n_ges.len)
+    i64.ge_u t, a, b
+    i64.ge_u u, b, a
+    call report2(t, u, n_geu, n_geu.len)
+    i64.eqz t, 0
+    i64.eqz u, a
+    call report2(t, u, n_eqz, n_eqz.len)
+
+    call std.println(h32, h32.len)
+    i32.eq t, c, c
+    i32.eq u, c, d
+    call report2(t, u, n_eq, n_eq.len)
+    i32.ne t, c, d
+    i32.ne u, c, c
+    call report2(t, u, n_ne, n_ne.len)
+    i32.lt_s t, c, d
+    i32.lt_s u, d, c
+    call report2(t, u, n_lts, n_lts.len)
+    i32.lt_u t, d, c
+    i32.lt_u u, c, d
+    call report2(t, u, n_ltu, n_ltu.len)
+    i32.gt_s t, d, c
+    i32.gt_s u, c, d
+    call report2(t, u, n_gts, n_gts.len)
+    i32.gt_u t, c, d
+    i32.gt_u u, d, c
+    call report2(t, u, n_gtu, n_gtu.len)
+    i32.le_s t, c, d
+    i32.le_s u, d, c
+    call report2(t, u, n_les, n_les.len)
+    i32.le_u t, d, c
+    i32.le_u u, c, d
+    call report2(t, u, n_leu, n_leu.len)
+    i32.ge_s t, d, c
+    i32.ge_s u, c, d
+    call report2(t, u, n_ges, n_ges.len)
+    i32.ge_u t, c, d
+    i32.ge_u u, d, c
+    call report2(t, u, n_geu, n_geu.len)
+    i32.eqz t, 0
+    i32.eqz u, c
+    call report2(t, u, n_eqz, n_eqz.len)
+
+    call std.println(hbr, hbr.len)
+    call report(1, n_brif, n_brif.len)          ; br_if taken: nonzero
+    call report(0, n_brif, n_brif.len)          ; br_if not taken: zero
+    call report_z(0, n_brz, n_brz.len)          ; br_ifz taken: zero
+    call report_z(7, n_brz, n_brz.len)          ; br_ifz not taken: nonzero
+
+    jmp over
+    call std.println(s_bad, s_bad.len)          ; skipped by the jmp
+over:
+    call std.println(s_jmp, s_jmp.len)
+
+    select r, 0, a, b                           ; condition 0 picks b
+    call std.print(s_sel, s_sel.len)
+    call std.print_i64(r)
+    call std.print_char('\n')
+    select r, c, a, b                           ; condition -1 is nonzero, picks a
+    call std.print(s_sel, s_sel.len)
+    call std.print_i64(r)
+    call std.print_char('\n')
+
+    call dispatch(1)                            ; in range
+    call dispatch(0)                            ; in range
+    call dispatch(7)                            ; default
+    ret
+}

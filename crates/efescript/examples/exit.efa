@@ -1,0 +1,27 @@
+; exit.efa - call/ret between two functions, ending with std.exit(5).
+; Run from the crate dir:  cargo run -q -p efescript -- run examples/exit.efa
+; Expected output (2 lines):
+;   in test
+;   back in main
+; Exit code: 5
+;
+; `test` prints and returns to its caller; `main` then prints and ends the process with
+; std.exit(5), so the code is 5 rather than main's own return.
+
+import std.println(i64, i64)
+import std.exit(i32)
+
+msg1 db "in test"
+msg2 db "back in main"
+
+fn test() {
+    call std.println(msg1, msg1.len)
+    ret
+}
+
+export fn main() {
+    call test()
+    call std.println(msg2, msg2.len)
+    call std.exit(5)
+    ret
+}

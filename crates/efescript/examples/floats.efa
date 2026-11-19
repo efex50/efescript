@@ -1,0 +1,270 @@
+; floats.efa - f64 and f32 arithmetic, comparisons, conversions, reinterpret, a dq float
+; constant read with f64.load, and a mutable f64 global.
+; Run from the crate dir:  cargo run -q -p efescript -- run examples/floats.efa
+; Expected output (every line, 50 lines):
+;   f64
+;   add 8.25
+;   sub 4.25
+;   mul 12.5
+;   div 3.125
+;   sqrt 2.5
+;   min 2
+;   max 6.25
+;   abs 2.5
+;   neg -6.25
+;   floor -3
+;   ceil -2
+;   trunc -2
+;   nearest 3
+;   lt 0
+;   ge 1
+;   nan-eq 0
+;   nan-ne 1
+;   convert -7
+;   i64.trunc_s 2
+;   sat_nan 0
+;   demote 6.25
+;   promote 1.5
+;   bits 4607182418800017408
+;   back 1
+;   bits-f32 1069547520
+;   dq 3.25
+;   dq 0.5
+;   global 1.5
+;   global 1.75
+;   0.1+0.2 0.30000000000000004
+;   nan-value NaN
+;   pos-inf inf
+;   neg-inf -inf
+;   f32
+;   add 8.25
+;   sub 4.25
+;   mul 12.5
+;   div 3.125
+;   sqrt 2.5
+;   min 2
+;   max 6.25
+;   abs 2.5
+;   neg -6.25
+;   floor -3
+;   ceil -2
+;   trunc -2
+;   nearest 3
+;   lt 0
+;   from-bits 1.5
+; Exit code: 0
+;
+; Floats print with Rust `{}` formatting: 2.0 prints as 2, NaN as NaN, infinity as inf.
+; Values are chosen so that every f32 result is exact, so the f32 lines match the f64 ones.
+; `show32` widens an f32 with f64.promote_f32 before printing.
+
+import std.print(i64, i64)
+import std.println(i64, i64)
+import std.print_f64(f64)
+import std.print_i64(i64)
+import std.print_char(i32)
+
+global mut acc: f64 = 1.5
+
+kv     dq 3.25, 0.5
+
+h64    db "f64"
+h32    db "f32"
+l_add  db "add"
+l_sub  db "sub"
+l_mul  db "mul"
+l_div  db "div"
+l_sqrt db "sqrt"
+l_min  db "min"
+l_max  db "max"
+l_abs  db "abs"
+l_neg  db "neg"
+l_flr  db "floor"
+l_ceil db "ceil"
+l_trnc db "trunc"
+l_near db "nearest"
+l_lt   db "lt"
+l_ge   db "ge"
+l_naneq db "nan-eq"
+l_nanne db "nan-ne"
+l_conv db "convert"
+l_itr  db "i64.trunc_s"
+l_sat  db "sat_nan"
+l_dem  db "demote"
+l_pro  db "promote"
+l_bits db "bits"
+l_back db "back"
+l_bitf db "bits-f32"
+l_dq   db "dq"
+l_glob db "global"
+l_sum  db "0.1+0.2"
+l_nanv db "nan-value"
+l_pinf db "pos-inf"
+l_ninf db "neg-inf"
+l_frb  db "from-bits"
+
+fn show(label: i64, len: i64, x: f64) {
+    call std.print(label, len)
+    call std.print_char(' ')
+    call std.print_f64(x)
+    call std.print_char('\n')
+    ret
+}
+
+fn show32(label: i64, len: i64, x: f32) {
+    reg w
+    f64.promote_f32 w, x
+    call show(label, len, w)
+    ret
+}
+
+fn show_i(label: i64, len: i64, v: i64) {
+    call std.print(label, len)
+    call std.print_char(' ')
+    call std.print_i64(v)
+    call std.print_char('\n')
+    ret
+}
+
+fn show_cmp(label: i64, len: i64, v: i32) {
+    reg w
+    i64.extend_i32_u w, v
+    call show_i(label, len, w)
+    ret
+}
+
+export fn main() {
+    reg x, y, a, b, c, d, q, n, k, h
+    reg x32, a32, b32, c32, d32, q32
+
+    ; f64 arithmetic: a = 6.25, b = 2, c = -2.5, d = 2.75
+    const.f64 a, 6.25
+    const.f64 b, 2.0
+    const.f64 c, -2.5
+    const.f64 d, 2.75
+    call std.println(h64, h64.len)
+    f64.add x, a, b
+    call show(l_add, l_add.len, x)
+    f64.sub x, a, b
+    call show(l_sub, l_sub.len, x)
+    f64.mul x, a, b
+    call show(l_mul, l_mul.len, x)
+    f64.div x, a, b
+    call show(l_div, l_div.len, x)
+    f64.sqrt x, a
+    call show(l_sqrt, l_sqrt.len, x)
+    f64.min x, a, b
+    call show(l_min, l_min.len, x)
+    f64.max x, a, b
+    call show(l_max, l_max.len, x)
+    f64.abs x, c
+    call show(l_abs, l_abs.len, x)
+    f64.neg x, a
+    call show(l_neg, l_neg.len, x)
+    f64.floor x, c
+    call show(l_flr, l_flr.len, x)
+    f64.ceil x, c
+    call show(l_ceil, l_ceil.len, x)
+    f64.trunc x, c
+    call show(l_trnc, l_trnc.len, x)
+    f64.nearest x, d
+    call show(l_near, l_near.len, x)
+
+    ; comparisons (i32 results) and NaN
+    const.f64 q, nan
+    f64.lt k, a, b
+    call show_cmp(l_lt, l_lt.len, k)
+    f64.ge k, a, b
+    call show_cmp(l_ge, l_ge.len, k)
+    f64.eq k, q, q
+    call show_cmp(l_naneq, l_naneq.len, k)
+    f64.ne k, q, q
+    call show_cmp(l_nanne, l_nanne.len, k)
+
+    ; conversions
+    const.i64 n, -7
+    f64.convert_i64_s x, n
+    call show(l_conv, l_conv.len, x)
+    i64.trunc_f64_s n, d
+    call show_i(l_itr, l_itr.len, n)
+    i64.trunc_sat_f64_s n, q
+    call show_i(l_sat, l_sat.len, n)
+    f32.demote_f64 x32, a
+    f64.promote_f32 x, x32
+    call show(l_dem, l_dem.len, x)
+    const.f32 h, 1.5
+    f64.promote_f32 x, h
+    call show(l_pro, l_pro.len, x)
+
+    ; reinterpret: bits of 1.0, back again; bits of 1.5f32
+    const.f64 y, 1.0
+    i64.reinterpret_f64 n, y
+    call show_i(l_bits, l_bits.len, n)
+    f64.reinterpret_i64 x, n
+    call show(l_back, l_back.len, x)
+    i32.reinterpret_f32 k, h
+    i64.extend_i32_u n, k
+    call show_i(l_bitf, l_bitf.len, n)
+
+    ; data constant and mutable global
+    f64.load x, kv
+    call show(l_dq, l_dq.len, x)
+    f64.load x, kv, 8
+    call show(l_dq, l_dq.len, x)
+    global.get x, acc
+    call show(l_glob, l_glob.len, x)
+    f64.add x, x, 0.25
+    global.set acc, x
+    global.get x, acc
+    call show(l_glob, l_glob.len, x)
+
+    ; decimal rounding, NaN and infinities
+    const.f64 x, 0.1
+    const.f64 y, 0.2
+    f64.add x, x, y
+    call show(l_sum, l_sum.len, x)
+    call show(l_nanv, l_nanv.len, q)
+    const.f64 y, inf
+    call show(l_pinf, l_pinf.len, y)
+    f64.neg y, y
+    call show(l_ninf, l_ninf.len, y)
+
+    ; f32 arithmetic, same inputs
+    call std.println(h32, h32.len)
+    const.f32 a32, 6.25
+    const.f32 b32, 2.0
+    const.f32 c32, -2.5
+    const.f32 d32, 2.75
+    f32.add x32, a32, b32
+    call show32(l_add, l_add.len, x32)
+    f32.sub x32, a32, b32
+    call show32(l_sub, l_sub.len, x32)
+    f32.mul x32, a32, b32
+    call show32(l_mul, l_mul.len, x32)
+    f32.div x32, a32, b32
+    call show32(l_div, l_div.len, x32)
+    f32.sqrt x32, a32
+    call show32(l_sqrt, l_sqrt.len, x32)
+    f32.min x32, a32, b32
+    call show32(l_min, l_min.len, x32)
+    f32.max x32, a32, b32
+    call show32(l_max, l_max.len, x32)
+    f32.abs x32, c32
+    call show32(l_abs, l_abs.len, x32)
+    f32.neg x32, a32
+    call show32(l_neg, l_neg.len, x32)
+    f32.floor x32, c32
+    call show32(l_flr, l_flr.len, x32)
+    f32.ceil x32, c32
+    call show32(l_ceil, l_ceil.len, x32)
+    f32.trunc x32, c32
+    call show32(l_trnc, l_trnc.len, x32)
+    f32.nearest x32, d32
+    call show32(l_near, l_near.len, x32)
+    f32.lt k, a32, b32
+    call show_cmp(l_lt, l_lt.len, k)
+    i32.reinterpret_f32 k, h
+    f32.reinterpret_i32 x32, k
+    call show32(l_frb, l_frb.len, x32)
+    ret
+}

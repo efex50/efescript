@@ -1,0 +1,31 @@
+[package]
+name = "efescript"
+version = "0.2.0"
+default-run = "efescript"
+edition = "2021"
+license = "MIT"
+
+
+
+[[bin]]
+name = "efescript"
+path = "src/main.rs"
+
+[[bin]]
+name = "efescript-runner"
+path = "src/bin/runner.rs"
+
+[dependencies]
+efevm = { path = "../efevm" }
+efa = { path = "../efa" }
+efemod = { path = "../efemod", features = ["write"] }
+toml = "1"
+lsp-server = "0.10"
+lsp-types = "0.97"
+rodio = { version = "0.23", optional = true, default-features = false, features = ["vorbis", "symphonia-wav", "symphonia-mp3", "symphonia-flac"] }
+serde_json = "1.0.154"
+
+[features]
+default = []
+# real sound playback for std.play_sound (needs ALSA headers on Linux)
+audio = ["dep:rodio"]

@@ -1,0 +1,76 @@
+; recursion.efa - recursive functions with call sugar: sum, factorial, fibonacci.
+; Run from the crate dir:  cargo run -q -p efescript -- run examples/recursion.efa
+; Expected output (3 lines):
+;   sum(100)=5050
+;   factorial(10)=3628800
+;   fibonacci(20)=6765
+; Exit code: 0
+;
+; Each function calls itself as `call f(x) -> r`. The assembler copies the argument into a
+; register window above the caller's own registers, calls, and copies the result out.
+; Immediate arguments (100, 10, 20) and the `ret 0` / `ret 1` immediates are materialised
+; by the assembler.
+
+import std.print(i64, i64)
+import std.print_i64(i64)
+import std.print_char(i32)
+
+s_sum db "sum(100)="
+s_fac db "factorial(10)="
+s_fib db "fibonacci(20)="
+
+fn sum(n: i64) -> i64 {
+    reg t, s
+    i64.eqz t, n
+    br_if t, base
+    i64.sub t, n, 1
+    call sum(t) -> s
+    i64.add s, s, n
+    ret s
+base:
+    ret 0
+}
+
+fn factorial(n: i64) -> i64 {
+    reg t, f
+    i64.le_s t, n, 1
+    br_if t, one
+    i64.sub t, n, 1
+    call factorial(t) -> f
+    i64.mul f, f, n
+    ret f
+one:
+    ret 1
+}
+
+fn fibonacci(n: i64) -> i64 {
+    reg t, a, b
+    i64.lt_s t, n, 2
+    br_if t, small
+    i64.sub t, n, 1
+    call fibonacci(t) -> a
+    i64.sub t, n, 2
+    call fibonacci(t) -> b
+    i64.add a, a, b
+    ret a
+small:
+    ret n
+}
+
+fn line(label: i64, len: i64, v: i64) {
+    call std.print(label, len)
+    call std.print_i64(v)
+    call std.print_char('\n')
+    ret
+}
+
+export fn main() {
+    reg v
+    call sum(100) -> v
+    call line(s_sum, s_sum.len, v)
+    call factorial(10) -> v
+    call line(s_fac, s_fac.len, v)
+    call fibonacci(20) -> v
+    call line(s_fib, s_fib.len, v)
+    ret
+}

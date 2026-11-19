@@ -1,0 +1,26 @@
+[package]
+name = "efemod"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "Mod packages (.efmod) for efeengine"
+
+[features]
+# The canonical container writer (`container::write`, `Package::write`). Only the packer
+# (efescript `pack`, xtask) enables it: `efemod = { path = "../efemod", features = ["write"] }`.
+# The engine depends on efemod without it, so the LZMA2 encoder is never compiled there
+# (unless another crate in the same build enables it: Cargo unifies features).
+write = ["dep:lzma-rust2", "lzma-rust2/encoder"]
+
+[dependencies]
+efevm = { path = "../efevm" }
+# Reader only: no AES, bzip2, PPMd, compressor or utility API.
+sevenz-rust2 = { version = "0.25", default-features = false }
+crc32fast = "1.5.5"
+# Same crate sevenz-rust2 decodes with; named directly only for the writer's LZMA2 encoder.
+lzma-rust2 = { version = "0.25", default-features = false, features = ["std"], optional = true }
+
+[dev-dependencies]
+# Self dev-dependency: tests always run with the writer enabled, while normal
+# (non-dev) dependents of efemod still build without it.
+efemod = { path = ".", features = ["write"] }

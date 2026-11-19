@@ -1,0 +1,17 @@
+; hello.efa - the first efa program: one import, one string, one call.
+; Run from the crate dir:  cargo run -q -p efescript -- run examples/hello.efa
+; Expected output (1 line):
+;   hello world!
+; Exit code: 0
+;
+; `msg` is the address of the bytes and `msg.len` their count. `main` returns nothing,
+; so the process exits with 0.
+
+import std.println(i64, i64)          ; pointer, length
+
+msg db "hello world!"
+
+export fn main() {
+    call std.println(msg, msg.len)
+    ret
+}

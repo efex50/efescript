@@ -1,0 +1,11 @@
+[package]
+name = "efa"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[dependencies]
+efevm = { path = "../efevm" }
+efemod = { path = "../efemod" }
+toml = "1"
+calc = { path = "../calc", default-features = false }

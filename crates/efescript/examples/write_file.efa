@@ -1,0 +1,30 @@
+; write_file.efa - writes the file `haha` with std.fs.write_file (port of the legacy create_e).
+; std.fs works only below a root directory the host grants, so run it with --fs-root:
+;   mkdir -p /tmp/scratch && cargo run -q -p efescript -- run examples/write_file.efa --fs-root /tmp/scratch
+; Result: /tmp/scratch/haha contains "haha" and a line break. Prints "written" and exits 0.
+; Without --fs-root the call is denied: it prints "denied" and exits with 1.
+;
+; std.fs.write_file(path, data) takes the path and the data as (pointer, length) pairs and
+; returns 0 on success, -1 on an I/O error (for example a missing directory) and -2 when
+; the host denies the call (no root, an absolute path, `..`, or a path outside the root).
+
+import std.println(i64, i64)
+import std.fs.write_file(i64, i64, i64, i64) -> i32
+
+path db "haha"
+text db "haha", 10
+ok   db "written"
+bad  db "denied"
+
+export fn main() -> i32 {
+    reg status
+    call std.fs.write_file(path, path.len, text, text.len) -> status
+    br_ifz status, good
+    call std.println(bad, bad.len)
+    const.i32 status, 1
+    ret status
+good:
+    call std.println(ok, ok.len)
+    const.i32 status, 0
+    ret status
+}

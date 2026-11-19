@@ -1,0 +1,11 @@
+[package]
+name = "efevm"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "Register-based bytecode VM for efescript (roadmap E1)"
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]

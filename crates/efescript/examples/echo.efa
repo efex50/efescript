@@ -1,0 +1,25 @@
+; echo.efa - reads a line from stdin with std.read_line and echoes it.
+; Run from the crate dir (type a line, or pipe one in):
+;   echo ali | cargo run -q -p efescript -- run examples/echo.efa
+; Expected output with the input "ali":
+;   name?
+;   ali
+; Exit code: 0. On empty stdin (EOF) read_line returns a negative count and println traps
+; (exit code 3); the example expects a line.
+;
+; std.read_line(ptr, cap) stores up to cap bytes at ptr and returns the length read,
+; without the trailing newline.
+
+import std.println(i64, i64)
+import std.read_line(i64, i64) -> i64
+
+ask db "name?"
+buf db "                                "
+
+export fn main() {
+    reg n
+    call std.println(ask, ask.len)
+    call std.read_line(buf, buf.len) -> n
+    call std.println(buf, n)
+    ret
+}
