@@ -1,6 +1,6 @@
 # efevm v1 specification
 
-Status: draft 7, 2026-11-19 (draft 1 plus the clarifications in "Changes from draft 1" and the changes in "Changes from draft 2" through "Changes from draft 6" at the end). This is roadmap item E1.1 (`crates/efescript/ROADMAP.md`).
+Status: draft 8, 2026-11-19 (draft 1 plus the clarifications in "Changes from draft 1" and the changes in "Changes from draft 2" through "Changes from draft 7" at the end). This is roadmap item E1.1 (`crates/efescript/ROADMAP.md`).
 `efevm` is the new core VM for efescript. It lives in its own crate (`crates/efevm`)
 next to the old VM in `crates/efescript`, which keeps working until the assembler
 moves over (E2).
@@ -66,7 +66,8 @@ targets any function index; calling an import is a host call.
 
 Notation: `d` destination register, `a b c` source registers, `imm` immediate, `L` label
 (an instruction index inside the same function), `f` function index. `T` ∈ {`i32`, `i64`},
-`F` ∈ {`f32`, `f64`}. Every instruction costs 1 unit of budget, except that `memory.copy`, `memory.fill` and `memory.grow` also pay for their size (see "Changes from draft 2", item 1).
+`F` ∈ {`f32`, `f64`}. Budget is charged per basic block, not per instruction (see "Basic blocks
+and budget" at the end of this section).
 
 **Constants and moves**
 - `const.i32 d, imm32` · `const.i64 d, imm64` · `const.f32 d, imm` · `const.f64 d, imm`
@@ -116,6 +117,28 @@ Notation: `d` destination register, `a b c` source registers, `imm` immediate, `
 
 Running past the last instruction of a function is impossible: the verifier requires
 every function to end in `ret`, `jmp`, `br_table` or `unreachable`.
+
+**Basic blocks and budget.** Each function body is split into basic blocks at its *leaders*:
+- instruction 0;
+- every label target of `jmp`, `br_if`, `br_ifz` and `br_table` (all targets and the default);
+- the instruction right after any `jmp`, `br_if`, `br_ifz`, `br_table`, `ret`, `unreachable`,
+  `call`, `call_indirect` or `yield` (when it exists).
+
+The *cost* of a block is the number of instructions from its leader up to, not including, the
+next leader. Code after a terminator that nothing jumps to still forms its own block. Leaders and
+costs are computed once when the module is verified (`Module::blocks`, `Module::block_cost`,
+`Module::is_leader`).
+
+Budget is a signed counter during one `resume`. Whenever control is at a leader about to execute
+it (the start of a run, after a jump or branch, falling through, entering a callee at pc 0,
+returning into the caller at the instruction after its `call`), then: if the counter is `<= 0`,
+the fiber stops with `Exit::OutOfBudget` positioned at that leader; otherwise the block's cost
+is subtracted and the block runs, even if the counter goes negative. A block is never cut
+short: a trap in the middle of a block still paid for the whole block. `memory.copy`,
+`memory.fill` and `memory.grow` also subtract their extra cost (see "Changes from draft 2",
+item 1) from the counter, with no immediate exit. When a run ends with a negative counter, the
+overrun becomes the fiber's debt (section 7) and the budget left is 0. Any two implementations
+(the interpreter, a compiled backend) must stop at the same leaders and use the same units.
 
 Opcode numbers are explicit constants in the source (`#[repr(u16)]` with a written
 discriminant on every variant) and are never reused or renumbered once released. The
@@ -175,6 +198,27 @@ pub enum Trap {
   `read_u32` … helpers) and globals. It returns `Ok(HostOk::Continue)`, `Ok(HostOk::Yield)`
   or `Err(Trap::Host(..))`. It cannot call back into the VM in v1.
 - Fibers are scheduled by the embedder (resume whichever it wants); the VM never switches by itself.
+- **Budget.** `resume(fiber, host, budget)` runs with a signed counter charged per basic block
+  (section 5). A budget larger than `i64::MAX` is treated as `i64::MAX`. A resume first pays
+  the fiber's *debt*: if `budget <= debt`, then `debt -= budget` and the resume returns
+  `OutOfBudget` having executed nothing; otherwise `budget -= debt`, the debt is 0 and the
+  rest runs. When a run ends with a negative counter (a block or a bulk operation overran the
+  budget), the overrun is added to the debt. So a budget smaller than one block still makes
+  progress, over several resumes, and budget 0 at a leader with no debt executes nothing.
+  `resume_units` also returns the units consumed (block costs, bulk extras and debt paid,
+  never more than `budget`; an overrun is not counted, it is debt).
+- **Single step.** `step(fiber, host)` executes exactly one instruction of a `Ready` or
+  `Suspended` fiber, charging no budget and paying no debt. It returns `OutOfBudget` when the
+  instruction ran and the fiber is still runnable (read: paused), or `Done`, `Yield` or `Trap`
+  as the instruction produces. A fiber stepped into the middle of a block and then resumed
+  continues from there without being charged for the rest of that block; the next leader charges
+  as usual. This only matters for debugging.
+- **Backends.** `efevm::backend` lets another crate run fibers instead of the interpreter
+  (`Instance::set_backend`) through safe access to the stack (`FiberStack`), memory, globals
+  and host calls (`RunCx`). A backend is used only when the fiber is positioned at a leader
+  (`resume`), never for `step`. It follows the budget rule of section 5 exactly and leaves a
+  suspended fiber in the interpreter's layout, so either side can resume what the other
+  suspended. The overrun-to-debt conversion happens in `Instance`, once, for both.
 - `Limits`: max memory pages, max call depth, max register stack size, max fibers (defaults in "Changes from draft 2", item 2).
 - `Instance::call` runs one export to completion in a single resume ("Changes from draft 2", item 3).
 
@@ -420,7 +464,7 @@ pin down points draft 1 left open.
    `Done` or `Trapped(trap)`. The trap location and backtrace of a trapped fiber are
    available through `Instance::trap_location` / `Instance::backtrace`.
 5. **Budget.** Budget 0 executes nothing and returns `OutOfBudget`. An instruction that traps
-   still costs 1, and so does a host call. (Superseded by draft 3, item 1: `memory.copy`, `memory.fill` and `memory.grow` now cost in proportion to their size.) `Instance::resume_counted` also returns the number of instructions executed.
+   still costs 1, and so does a host call. (Superseded by draft 3, item 1: `memory.copy`, `memory.fill` and `memory.grow` now cost in proportion to their size.) `Instance::resume_counted` also returned the number of instructions executed (removed in draft 8).
 6. **Limits.** `max_call_depth` counts live activations including the entry function. A call
    that would exceed it traps with `StackOverflow`; with 0, `spawn` fails. `max_registers` is
    the total register slots of one fiber across all its frames. A register stack that cannot be
@@ -461,7 +505,7 @@ Draft 3 makes these three changes.
    pages) owes about 2^64 units, so it is effectively dead; the embedder can still remove it.
    `Instance::resume_counted` keeps counting executed **instructions**, not units: the extra
    units of bulk operations and debt payments are not included, so a resume that executes
-   2 instructions and pays 10 units of debt reports 2.
+   2 instructions and pays 10 units of debt reports 2. (Removed in draft 8.)
 2. **Lower default limits and stack release.** `Limits::default()` is now
    `max_memory_pages = 1024` (64 MiB), `max_call_depth = 4096`, `max_registers = 262144` (per
    fiber) and `max_fibers = 256`. When a fiber finishes (`Done`) or traps, its register stack,
@@ -501,8 +545,8 @@ is still valid and means the same.
    A different index hash alone is not an error.
 4. **Debugger access.** For a `Ready` or `Suspended` fiber, `Instance::fiber_location` (the next
    instruction), `fiber_registers` (the current frame) and `fiber_backtrace` (innermost first,
-   callers at their `call` instruction). `resume` with budget 1 executes exactly one instruction
-   (if no budget debt is owed).
+   callers at their `call` instruction). `resume` with budget 1 executed exactly one instruction
+   (if no budget debt was owed). (Superseded by draft 8: use `Instance::step`.)
 
 ## Changes from draft 4
 
@@ -546,3 +590,30 @@ now `2`; version 1 files are rejected (`BadVersion(1)`), with no compatibility k
 3. **API**: `binary::{MAGIC, VERSION, HEADER_LEN, checksum, seal}`. `encode` seals its
    output; `seal` is for tools and tests that build or patch bytes by hand.
 4. **Engine**: the script cache's `CACHE_FORMAT` is 2, so old `efa/v1` disk caches are deleted.
+
+## Changes from draft 7
+
+Draft 8 changes the budget unit from the instruction to the basic block, so a compiled backend
+(roadmap E7, `crates/efescript/docs/e7-cranelift-design.md`) can charge at the same points as
+the interpreter. The binary format is unchanged.
+
+1. **Per-block budget** (5, 7): leaders and block costs as defined in section 5. The budget is a
+   signed counter; at a leader a counter `<= 0` stops with `OutOfBudget` at that leader,
+   otherwise the cost is subtracted and the block runs whole. Superseded: draft 1's "every
+   instruction costs 1", and draft 2's item 5 (budget 0 executes nothing: still true at a
+   leader).
+2. **Bulk operations** (draft 3, item 1): the extra cost is subtracted from the counter with no
+   immediate exit; a trap still adds no extra cost. The overrun becomes debt when the run ends,
+   so the fiber now stops at the next leader instead of right after the bulk instruction.
+3. **Debt** (draft 3, item 1) also comes from a block that overran the budget; it is paid first
+   by the next resume, as before.
+4. **`resume_counted` is removed.** Compiled code cannot count executed instructions.
+   `resume_units` stays (units = block costs + bulk extras + debt paid, at most the budget).
+5. **`Instance::step`** replaces `resume(.., 1)` as the way to run one instruction (4 of draft 3,
+   debugger access): no budget, no debt, `OutOfBudget` means "paused".
+6. **Module API**: `Module::blocks(func) -> &[(leader pc, cost)]`, `Module::block_cost(func,
+   pc) -> u32` (0 for a non-leader, an import or an index out of range) and
+   `Module::is_leader(func, pc)`, all in the whole function index space.
+7. **Backend seam**: `efevm::backend::{Backend, RunCx, FiberStack, Frame, FuncInfo,
+   run_interpreter}`, `Instance::set_backend` and `Instance::has_backend`. `FiberStack` is the
+   former internal `Stack`, public with documented invariants.

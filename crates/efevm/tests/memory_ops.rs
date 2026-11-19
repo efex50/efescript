@@ -228,7 +228,7 @@ fn nop_does_nothing_and_costs_one() {
     });
     let mut inst = instantiate(&m, Limits::default());
     let f = inst.spawn("main", &[]).unwrap();
-    let (exit, used) = inst.resume_counted(f, &mut (), BUDGET);
+    let (exit, used) = inst.resume_units(f, &mut (), BUDGET);
     assert_eq!(exit, Exit::Done);
     assert_eq!(inst.results(f).unwrap(), &[7]);
     // nop, const, nop, ret
@@ -644,6 +644,10 @@ fn memory_grow_huge_request_fails() {
         fb.const_i64(1, -1);
         fb.memory_grow(0, 1);
         fb.memory_size(1);
+        // a leader after the grow, where the overrun stops the fiber
+        let after = fb.new_label();
+        fb.jmp(after);
+        fb.bind(after);
     });
     // The failed grow is charged for the requested size (saturated), so the fiber owes a
     // huge debt; the result is still correct and the instance usable.

@@ -342,13 +342,13 @@ fn single_step_debugger_hooks() {
         ((main, 3), vec![(main, 3)], vec![42, 2, 0]),
     ];
     for (loc, bt, regs) in expect {
-        assert_eq!(inst.resume_counted(id, &mut (), 1), (Exit::OutOfBudget, 1));
+        assert_eq!(inst.step(id, &mut ()), Exit::OutOfBudget);
         assert_eq!(inst.status(id), Some(FiberStatus::Ready));
         assert_eq!(inst.fiber_location(id), Some(loc));
         assert_eq!(inst.fiber_backtrace(id), bt);
         assert_eq!(inst.fiber_registers(id), Some(&regs[..]));
     }
-    assert_eq!(inst.resume_counted(id, &mut (), 1), (Exit::Done, 1));
+    assert_eq!(inst.step(id, &mut ()), Exit::Done);
     assert_eq!(inst.results(id), Some(&[42u64][..]));
     assert_eq!(inst.fiber_location(id), None);
     assert_eq!(inst.fiber_registers(id), None);

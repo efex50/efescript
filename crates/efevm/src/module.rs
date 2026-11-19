@@ -281,17 +281,106 @@ impl ModuleData {
     }
 }
 
+/// Basic blocks of one function (SPEC section 5, "Basic blocks and budget").
+#[derive(Debug, Default)]
+struct FuncBlocks {
+    /// Per instruction index: the cost of the block led by it, 0 for non-leaders.
+    cost_at: Box<[u32]>,
+    /// `(leader pc, cost)` sorted by pc.
+    leaders: Box<[(u32, u32)]>,
+}
+
+/// Computes the leaders and costs of one verified function body.
+fn compute_blocks(f: &Function) -> FuncBlocks {
+    let n = f.code.len();
+    let mut leader = vec![false; n];
+    let mut mark = |i: usize| {
+        if let Some(l) = leader.get_mut(i) {
+            *l = true;
+        }
+    };
+    mark(0);
+    for (i, inst) in f.code.iter().enumerate() {
+        match inst.op {
+            Op::Jmp => {
+                mark(inst.a as usize);
+                mark(i + 1);
+            }
+            Op::BrIf | Op::BrIfz => {
+                mark(inst.b as usize);
+                mark(i + 1);
+            }
+            Op::BrTable => {
+                if let Some(t) = f.br_tables.get(inst.b as usize) {
+                    for l in t.targets.iter().chain(std::iter::once(&t.default)) {
+                        mark(*l as usize);
+                    }
+                }
+                mark(i + 1);
+            }
+            Op::Ret | Op::Unreachable | Op::Call | Op::CallIndirect | Op::Yield => mark(i + 1),
+            _ => {}
+        }
+    }
+    let mut cost_at = vec![0u32; n];
+    let mut leaders = Vec::new();
+    let mut i = 0;
+    while i < n {
+        let mut j = i + 1;
+        while j < n && !leader[j] {
+            j += 1;
+        }
+        cost_at[i] = (j - i) as u32;
+        leaders.push((i as u32, (j - i) as u32));
+        i = j;
+    }
+    FuncBlocks { cost_at: cost_at.into(), leaders: leaders.into() }
+}
+
 /// A verified module; cloning is cheap.
 #[derive(Clone, Debug)]
 pub struct Module {
     data: Arc<ModuleData>,
+    /// Basic blocks per defined function (index = function index minus the import count).
+    blocks: Arc<[FuncBlocks]>,
 }
 
 impl Module {
-    /// Verifies and wraps.
+    /// Verifies, computes the basic blocks of every function and wraps.
     pub fn new(data: ModuleData) -> Result<Module, LoadError> {
         crate::verify::verify(&data)?;
-        Ok(Module { data: Arc::new(data) })
+        let blocks: Arc<[FuncBlocks]> = data.functions.iter().map(compute_blocks).collect();
+        Ok(Module { data: Arc::new(data), blocks })
+    }
+
+    fn func_blocks(&self, func_index: u32) -> Option<&FuncBlocks> {
+        let i = (func_index as usize).checked_sub(self.data.imports.len())?;
+        self.blocks.get(i)
+    }
+
+    /// Cost-per-pc table of a function (0 for non-leaders); empty for imports and indices out
+    /// of range. The interpreter looks leaders up here in O(1).
+    pub(crate) fn cost_table(&self, func_index: u32) -> &[u32] {
+        self.func_blocks(func_index).map_or(&[], |b| &b.cost_at)
+    }
+
+    /// The budget cost of the basic block that starts at instruction `pc` of function
+    /// `func_index` (whole function index space, imports first): the number of instructions up
+    /// to the next leader. 0 when `pc` is not a block leader, or the function is an import or
+    /// out of range. See SPEC section 5 for the leader rules.
+    pub fn block_cost(&self, func_index: u32, pc: u32) -> u32 {
+        self.cost_table(func_index).get(pc as usize).copied().unwrap_or(0)
+    }
+
+    /// Whether `pc` is a block leader of function `func_index`.
+    pub fn is_leader(&self, func_index: u32, pc: u32) -> bool {
+        self.block_cost(func_index, pc) != 0
+    }
+
+    /// The basic blocks of a function as `(leader pc, cost)`, sorted by pc; they partition the
+    /// function body. Empty for imports and indices out of range.
+    pub fn blocks(&self, func_index: u32) -> &[(u32, u32)] {
+        self.func_blocks(func_index).map_or(&[], |b| &b.leaders)
     }
 
     /// Decodes `.efvm` bytes, then verifies.

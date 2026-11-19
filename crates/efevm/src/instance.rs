@@ -2,7 +2,8 @@
 
 use crate::error::{CallError, LinkError, LoadError, SpawnError};
 use crate::imports::{HostFunc, Imports};
-use crate::interp::{Env, FuncInfo, Stack, run};
+use crate::backend::{Backend, FiberStack, FuncInfo, RunCx, run_interpreter};
+use crate::interp;
 use crate::memory::Memory;
 use crate::module::{ExportKind, Module};
 use crate::trap::{Exit, Trap};
@@ -30,7 +31,7 @@ pub enum FiberStatus {
 
 struct Fiber {
     status: FiberStatus,
-    stack: Stack,
+    stack: FiberStack,
     /// Call stack at the trap, innermost first (only for trapped fibers).
     trace: Vec<(u32, u32)>,
 }
@@ -63,6 +64,7 @@ pub struct Instance<H> {
     slots: Vec<Slot>,
     free: Vec<u32>,
     live: u32,
+    backend: Option<Box<dyn Backend<H>>>,
 }
 
 impl<H> Instance<H> {
@@ -143,7 +145,21 @@ impl<H> Instance<H> {
             slots: Vec::new(),
             free: Vec::new(),
             live: 0,
+            backend: None,
         })
+    }
+
+    /// Sets (or clears) the backend that runs fibers instead of the interpreter. `resume` uses
+    /// it only when the fiber is positioned at a block leader (`Module::is_leader`); a fiber
+    /// stopped in the middle of a block (by `step`) is run by the interpreter, and so is every
+    /// `step`. Fibers suspended by either side can be resumed by the other.
+    pub fn set_backend(&mut self, backend: Option<Box<dyn Backend<H>>>) {
+        self.backend = backend;
+    }
+
+    /// Whether a backend is set.
+    pub fn has_backend(&self) -> bool {
+        self.backend.is_some()
     }
 
     /// Spawns a fiber at an exported function. `args` are raw register bits; the upper 32 bits
@@ -177,7 +193,7 @@ impl<H> Instance<H> {
         if size as u64 > self.limits.max_registers as u64 || self.limits.max_call_depth < 1 {
             return Err(SpawnError::StackOverflow);
         }
-        let mut stack = Stack { func, ..Stack::default() };
+        let mut stack = FiberStack { func, ..FiberStack::default() };
         if stack.regs.try_reserve_exact(size).is_err() {
             return Err(SpawnError::StackOverflow);
         }
@@ -208,81 +224,132 @@ impl<H> Instance<H> {
         s.fiber.as_ref()
     }
 
-    /// Runs `fiber` for at most `budget` budget units. Each executed instruction costs 1
-    /// (including calls, host calls and `yield`); `memory.copy` and `memory.fill` cost
-    /// `1 + len / 256` and `memory.grow` costs `1 + pages * 65536 / 256` (saturating, charged
-    /// even if the grow fails; a trapping bulk op costs 1). If a bulk op costs more than the
-    /// budget left, it still completes, the rest of the cost becomes a per-fiber debt and the
-    /// resume returns `OutOfBudget` right after it. A later resume pays the debt first: if
-    /// `budget <= debt` the debt shrinks by `budget` and nothing executes, otherwise the
-    /// remainder of the budget runs normally.
+    /// Runs `fiber` for at most about `budget` budget units, charged per basic block.
+    ///
+    /// The budget is a signed counter during the run. Whenever control is at a block leader
+    /// about to execute it (the start of the run, after a jump or branch, falling through,
+    /// entering a callee, returning to a caller), a counter `<= 0` stops the fiber with
+    /// `OutOfBudget` at that leader; otherwise the block's cost (its instruction count, see
+    /// `Module::block_cost`) is subtracted and the whole block runs, even if the counter goes
+    /// negative. `memory.copy` and `memory.fill` also subtract `len / 256`, and `memory.grow`
+    /// `pages * 65536 / 256` (saturating, also when the grow fails), with no immediate exit.
+    /// When the run ends with a negative counter, the overrun becomes a per-fiber debt that
+    /// the next resume pays first: if `budget <= debt` the debt shrinks by `budget` and
+    /// nothing executes (`OutOfBudget`), otherwise the rest of the budget runs. So a budget
+    /// smaller than a block still makes progress, and budget 0 at a leader with no debt
+    /// executes nothing.
     ///
     /// - Resuming a `Done` fiber returns `Exit::Done` again; a `Trapped` fiber returns the same
     ///   `Exit::Trap` again; an unknown or removed id returns `Exit::Trap(Trap::Host("invalid fiber"))`.
-    /// - If the budget runs out before the next instruction, returns `OutOfBudget` with the fiber
-    ///   resumable at that instruction; budget 0 executes nothing.
+    /// - `OutOfBudget` leaves the fiber resumable at a block leader (`fiber_location`). To run
+    ///   one instruction, use `step`.
     /// - `yield` returns `Exit::Yield` with the pc after the yield. A host function returning
     ///   `HostOk::Yield` has its results written first, then `Exit::Yield`.
     /// - A host `Err(trap)` traps the fiber; other fibers and the instance stay usable.
     pub fn resume(&mut self, fiber: FiberId, host: &mut H, budget: u64) -> Exit {
-        self.resume_counted(fiber, host, budget).0
+        self.resume_inner(fiber, host, budget, false).0
     }
 
-    /// Like `resume`, also returning the number of instructions executed in this call (not
-    /// budget units: debt payments and the extra cost of bulk operations are not counted).
-    pub fn resume_counted(&mut self, fiber: FiberId, host: &mut H, budget: u64) -> (Exit, u64) {
-        let (exit, instrs, _) = self.resume_inner(fiber, host, budget);
-        (exit, instrs)
-    }
-
-    /// Like `resume`, also returning the budget units consumed by this call: instructions plus
-    /// the extra units of bulk memory operations plus debt paid. Never more than `budget`, so an
-    /// embedder can subtract it from a total budget across several resumes. A resume that
-    /// executes nothing and pays no debt (budget 0, done, trapped, invalid fiber) reports 0.
+    /// Like `resume`, also returning the budget units consumed by this call: block costs plus
+    /// the extra units of bulk memory operations plus debt paid. Never more than `budget` (an
+    /// overrun is not counted; it becomes debt), so an embedder can subtract it from a total
+    /// budget across several resumes. A resume that executes nothing and pays no debt (budget
+    /// 0 at a leader, done, trapped, invalid fiber) reports 0.
     pub fn resume_units(&mut self, fiber: FiberId, host: &mut H, budget: u64) -> (Exit, u64) {
-        let (exit, _, units) = self.resume_inner(fiber, host, budget);
-        (exit, units)
+        self.resume_inner(fiber, host, budget, false)
     }
 
-    /// Returns `(exit, instructions executed, budget units consumed)`.
-    fn resume_inner(&mut self, fiber: FiberId, host: &mut H, mut budget: u64) -> (Exit, u64, u64) {
+    /// Executes exactly one instruction of a `Ready` or `Suspended` fiber, charging no budget
+    /// and paying no debt (for debuggers).
+    ///
+    /// Returns `Exit::OutOfBudget` when the instruction ran and the fiber is still runnable
+    /// (read it as "paused; resumable"; the status is `Ready`), or `Done`, `Yield` or
+    /// `Trap` as the instruction produces. A `Done`, `Trapped` or invalid fiber answers as
+    /// `resume` does.
+    ///
+    /// A fiber stepped into the middle of a block and then resumed normally continues from
+    /// there without being charged for the rest of that block; it is charged again at the
+    /// next leader. Steps always run in the interpreter, and so does the resume of such a
+    /// fiber (a backend only runs fibers at leaders).
+    pub fn step(&mut self, fiber: FiberId, host: &mut H) -> Exit {
+        self.resume_inner(fiber, host, 0, true).0
+    }
+
+    /// Returns `(exit, budget units consumed)`.
+    fn resume_inner(&mut self, fiber: FiberId, host: &mut H, budget: u64, step: bool) -> (Exit, u64) {
         let Instance {
-            module, memory, globals, gmut, gmask, res_masks, infos, type_canon, hosts, limits, slots, ..
+            module,
+            memory,
+            globals,
+            gmut,
+            gmask,
+            res_masks,
+            infos,
+            type_canon,
+            hosts,
+            limits,
+            slots,
+            backend,
+            ..
         } = self;
         let fib = match slots.get_mut(fiber.index as usize) {
             Some(s) if s.generation == fiber.generation => s.fiber.as_mut(),
             _ => None,
         };
         let Some(fib) = fib else {
-            return (Exit::Trap(Trap::Host("invalid fiber".into())), 0, 0);
+            return (Exit::Trap(Trap::Host("invalid fiber".into())), 0);
         };
         match &fib.status {
-            FiberStatus::Done => return (Exit::Done, 0, 0),
-            FiberStatus::Trapped(t) => return (Exit::Trap(t.clone()), 0, 0),
+            FiberStatus::Done => return (Exit::Done, 0),
+            FiberStatus::Trapped(t) => return (Exit::Trap(t.clone()), 0),
             _ => {}
         }
-        // Pay budget debt from earlier bulk memory operations before executing anything.
-        let paid = fib.stack.debt;
-        if paid > 0 {
-            if budget <= paid {
-                fib.stack.debt = paid - budget;
-                return (Exit::OutOfBudget, 0, budget);
+        // Pay budget debt from earlier overruns before executing anything.
+        let mut budget = budget;
+        let mut paid = 0;
+        if !step {
+            paid = fib.stack.debt;
+            if paid > 0 {
+                if budget <= paid {
+                    fib.stack.debt = paid - budget;
+                    return (Exit::OutOfBudget, budget);
+                }
+                fib.stack.debt = 0;
+                budget -= paid;
             }
-            fib.stack.debt = 0;
-            budget -= paid;
         }
-        let env = Env {
-            data: module.data(),
+        let start = budget.min(i64::MAX as u64) as i64;
+        let mut cx = RunCx {
+            module,
             infos,
-            hosts,
             type_canon,
+            limits: *limits,
+            memory,
+            globals,
+            fiber,
+            host,
+            hosts,
             gmut,
             gmask,
             res_masks,
-            limits: *limits,
         };
-        let (exit, left) = run(&env, memory, globals, host, fiber, &mut fib.stack, budget);
-        let extra = std::mem::take(&mut fib.stack.extra);
+        let (exit, counter) = if step {
+            interp::run::<H, true>(&mut cx, &mut fib.stack, 0)
+        } else {
+            match backend {
+                Some(b) if module.is_leader(fib.stack.func, fib.stack.pc) => b.run(&mut cx, &mut fib.stack, start),
+                _ => run_interpreter(&mut cx, &mut fib.stack, start),
+            }
+        };
+        // The one place a negative counter (an overrun) becomes debt, for every backend.
+        let used = if step {
+            0
+        } else if counter < 0 {
+            fib.stack.debt = fib.stack.debt.saturating_add(counter.unsigned_abs());
+            start as u64
+        } else {
+            (start - counter) as u64
+        };
         fib.status = match &exit {
             Exit::Done => FiberStatus::Done,
             Exit::Yield => FiberStatus::Suspended,
@@ -301,8 +368,7 @@ impl<H> Instance<H> {
             fib.stack.frames = Vec::new();
             fib.stack.scratch = Vec::new();
         }
-        // Instructions executed: the units spent minus the extra units bulk operations charged.
-        (exit, budget - left - extra, paid + (budget - left))
+        (exit, paid + used)
     }
 
     /// Spawns `export`, resumes it once with `budget`, and removes the fiber again. Returns the
@@ -359,15 +425,15 @@ impl<H> Instance<H> {
     }
 
     /// The paused stack of a `Ready` or `Suspended` fiber (debugger access).
-    fn paused(&self, fiber: FiberId) -> Option<&Stack> {
+    fn paused(&self, fiber: FiberId) -> Option<&FiberStack> {
         let f = self.fiber(fiber)?;
         matches!(f.status, FiberStatus::Ready | FiberStatus::Suspended).then_some(&f.stack)
     }
 
     /// `(function index, instruction index)` of the next instruction a `Ready` or `Suspended`
-    /// fiber will execute; `None` for `Done`, `Trapped` or invalid fibers. `resume` with
-    /// budget 1 executes exactly that instruction (unless budget debt is owed: then the
-    /// resume only pays debt).
+    /// fiber will execute; `None` for `Done`, `Trapped` or invalid fibers. After `OutOfBudget`
+    /// or a `yield` it is a block leader or the instruction after a `yield`/`call`; after
+    /// `step` it can be anywhere. `step` executes exactly that instruction.
     pub fn fiber_location(&self, fiber: FiberId) -> Option<(u32, u32)> {
         self.paused(fiber).map(|s| (s.func, s.pc))
     }
@@ -519,20 +585,22 @@ mod tests {
             fb.br_if(3, l);
             fb.ret(1);
         });
+        // Blocks: [0,1] (cost 2), loop body [2,3,4] (cost 3, br_if ends it), [5] ret (cost 1).
         let f = i.spawn("main", &[100]).unwrap();
-        assert_eq!(i.resume_counted(f, &mut (), 0), (Exit::OutOfBudget, 0));
+        assert_eq!(i.resume_units(f, &mut (), 0), (Exit::OutOfBudget, 0));
         let mut total = 0;
         let mut calls = 0;
         loop {
-            let (e, n) = i.resume_counted(f, &mut (), 7);
+            let (e, n) = i.resume_units(f, &mut (), 7);
             total += n;
             calls += 1;
             match e {
-                Exit::OutOfBudget => assert_eq!(n, 7),
+                Exit::OutOfBudget => assert!(n <= 7),
                 Exit::Done => break,
                 e => panic!("{e:?}"),
             }
         }
+        // Every unit is paid exactly once, whether as a block cost or as debt.
         assert_eq!(total, 2 + 100 * 3 + 1);
         assert!(calls > 40);
         assert_eq!(i.results(f).unwrap(), &[100]);
@@ -855,7 +923,7 @@ mod tests {
         });
         let f = i.spawn("main", &[33_333_333]).unwrap();
         let t = std::time::Instant::now();
-        let (e, n) = i.resume_counted(f, &mut (), u64::MAX);
+        let (e, n) = i.resume_units(f, &mut (), u64::MAX);
         let dt = t.elapsed();
         assert_eq!(e, Exit::Done);
         println!("{n} instructions, {:.3} ns/instruction", dt.as_nanos() as f64 / n as f64);

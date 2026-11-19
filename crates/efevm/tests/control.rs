@@ -836,7 +836,7 @@ fn nop_does_nothing_and_costs_one() {
     });
     let mut inst = Instance::new(&m, &Imports::<()>::new(), Limits::default()).unwrap();
     let f = inst.spawn("main", &[]).unwrap();
-    let (e, n) = inst.resume_counted(f, &mut (), 100);
+    let (e, n) = inst.resume_units(f, &mut (), 100);
     assert_eq!(e, Exit::Done);
     assert_eq!(n, 5);
     assert_eq!(inst.results(f), Some(&[9u64][..]));

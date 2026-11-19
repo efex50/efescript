@@ -176,12 +176,7 @@ impl<H: 'static> Debugger<H> {
     }
 
     fn step_one_instruction(&mut self, host: &mut H) -> Exit {
-        loop {
-            let (exit, instrs) = self.instance.resume_counted(self.fiber, host, 1);
-            if exit != Exit::OutOfBudget || instrs > 0 {
-                return exit;
-            }
-        }
+        self.instance.step(self.fiber, host)
     }
 
     fn cmd_step(&mut self, host: &mut H, out: &mut dyn Write) -> IoResult<bool> {

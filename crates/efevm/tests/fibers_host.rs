@@ -51,7 +51,8 @@ fn endless_loop_out_of_budget_and_resumable() {
         assert_eq!(inst.status(f), Some(FiberStatus::Ready));
         assert_eq!(inst.results(f), None);
     }
-    let (e, n) = inst.resume_counted(f, &mut (), 12345);
+    // each iteration is the one-instruction block `jmp top`
+    let (e, n) = inst.resume_units(f, &mut (), 12345);
     assert_eq!((e, n), (Exit::OutOfBudget, 12345));
 }
 
@@ -68,7 +69,7 @@ fn counting_loop_same_result_with_any_budget() {
         let mut resumes = 0u64;
         let mut total = 0u64;
         loop {
-            let (e, n) = inst.resume_counted(f, &mut (), budget);
+            let (e, n) = inst.resume_units(f, &mut (), budget);
             assert!(n <= budget);
             total += n;
             resumes += 1;
@@ -80,14 +81,17 @@ fn counting_loop_same_result_with_any_budget() {
             assert!(resumes < 10_000);
         }
         assert_eq!(inst.results(f), Some(&[expected][..]), "budget {budget}");
-        // 2 setup + 3 per iteration * 100 + ret = 303 instructions
-        assert_eq!(total, 303, "budget {budget}");
+        // Blocks: [2 setup] (2), loop body (3, entered 100 times), [ret] (1) = 303 units. A
+        // budget smaller than a block overruns into debt, which later resumes pay, so every
+        // unit is paid exactly once; only an overrun of the very last block (ret, cost 1) is
+        // never paid because the fiber is Done by then.
+        assert!((302..=303).contains(&total), "budget {budget}: {total}");
         inst.remove_fiber(f);
     }
 }
 
 fn straight(n: usize) -> Module {
-    // n instructions in total: (n-2) nops, const, ret
+    // one block of n instructions in total: (n-2) nops, const, ret
     one(0, 1, 1, |f| {
         for _ in 0..n - 2 {
             f.nop();
@@ -98,42 +102,64 @@ fn straight(n: usize) -> Module {
 }
 
 #[test]
-fn resume_counted_budget_zero_executes_nothing() {
+fn budget_zero_at_a_leader_executes_nothing() {
     let m = straight(4);
     let mut inst = plain(&m);
     let f = inst.spawn("main", &[]).unwrap();
-    assert_eq!(inst.resume_counted(f, &mut (), 0), (Exit::OutOfBudget, 0));
-    assert_eq!(inst.resume_counted(f, &mut (), 0), (Exit::OutOfBudget, 0));
-    assert_eq!(inst.resume_counted(f, &mut (), 4), (Exit::Done, 4));
+    assert_eq!(inst.resume_units(f, &mut (), 0), (Exit::OutOfBudget, 0));
+    assert_eq!(inst.resume_units(f, &mut (), 0), (Exit::OutOfBudget, 0));
+    assert_eq!(inst.fiber_location(f), Some((0, 0)));
+    assert_eq!(inst.resume_units(f, &mut (), 4), (Exit::Done, 4));
 }
 
 #[test]
-fn resume_counted_exact_budget_boundaries() {
+fn a_block_runs_whole_with_any_positive_budget() {
     for n in [2usize, 3, 4, 10, 50] {
         let m = straight(n);
         let mut inst = plain(&m);
-        // budget N -> Done in one go
+        // The single block (cost n) is entered while the counter is positive, so it runs
+        // whole; units are capped at the budget (the overrun is debt, forgiven at Done).
+        for budget in [1u64, n as u64 - 1, n as u64, n as u64 + 100] {
+            let f = inst.spawn("main", &[]).unwrap();
+            assert_eq!(inst.resume_units(f, &mut (), budget), (Exit::Done, budget.min(n as u64)), "n {n} budget {budget}");
+            assert_eq!(inst.results(f), Some(&[5u64][..]));
+            inst.remove_fiber(f);
+        }
         let f = inst.spawn("main", &[]).unwrap();
-        assert_eq!(inst.resume_counted(f, &mut (), n as u64), (Exit::Done, n as u64));
-        assert_eq!(inst.results(f), Some(&[5u64][..]));
-        // budget N + 100 still counts only N
-        let f = inst.spawn("main", &[]).unwrap();
-        assert_eq!(inst.resume_counted(f, &mut (), n as u64 + 100), (Exit::Done, n as u64));
-        // budget N-1 -> OutOfBudget, then 1 more -> Done
-        let f = inst.spawn("main", &[]).unwrap();
-        assert_eq!(
-            inst.resume_counted(f, &mut (), n as u64 - 1),
-            (Exit::OutOfBudget, n as u64 - 1)
-        );
+        assert_eq!(inst.resume_units(f, &mut (), 0), (Exit::OutOfBudget, 0));
         assert_eq!(inst.results(f), None);
-        assert_eq!(inst.resume_counted(f, &mut (), 1), (Exit::Done, 1));
-        assert_eq!(inst.results(f), Some(&[5u64][..]));
     }
 }
 
 #[test]
-fn trap_instruction_counts_toward_budget() {
-    // nop, nop, unreachable: traps on the third instruction
+fn small_budgets_make_progress_through_debt() {
+    // Block of 9 with budget 3: runs whole (overrun 6 becomes debt). The next resumes pay the
+    // debt (3, 3) before anything else runs; a loop on this never livelocks.
+    let m = one(0, 1, 1, |f| {
+        let l = f.new_label();
+        for _ in 0..8 {
+            f.nop();
+        }
+        f.jmp(l);
+        f.bind(l);
+        f.const_i64(0, 5);
+        f.ret(0);
+    });
+    let mut inst = plain(&m);
+    let f = inst.spawn("main", &[]).unwrap();
+    // [8 nops, jmp] = 9, then [const, ret] = 2
+    assert_eq!(inst.resume_units(f, &mut (), 3), (Exit::OutOfBudget, 3)); // debt 6
+    assert_eq!(inst.fiber_location(f), Some((0, 9)));
+    assert_eq!(inst.resume_units(f, &mut (), 3), (Exit::OutOfBudget, 3)); // debt 3
+    assert_eq!(inst.resume_units(f, &mut (), 3), (Exit::OutOfBudget, 3)); // debt 0
+    assert_eq!(inst.fiber_location(f), Some((0, 9)));
+    assert_eq!(inst.resume_units(f, &mut (), 1), (Exit::Done, 1));
+    assert_eq!(inst.results(f), Some(&[5u64][..]));
+}
+
+#[test]
+fn trap_charges_its_whole_block() {
+    // nop, nop, unreachable: one block of 3, charged on entry
     let m = one(0, 0, 0, |f| {
         f.nop();
         f.nop();
@@ -141,10 +167,12 @@ fn trap_instruction_counts_toward_budget() {
     });
     let mut inst = plain(&m);
     let f = inst.spawn("main", &[]).unwrap();
-    assert_eq!(inst.resume_counted(f, &mut (), 2), (Exit::OutOfBudget, 2));
-    let (e, n) = inst.resume_counted(f, &mut (), 5);
-    assert_eq!(e, Exit::Trap(Trap::Unreachable));
-    assert!(n <= 1, "executed {n}");
+    assert_eq!(inst.resume_units(f, &mut (), 2), (Exit::Trap(Trap::Unreachable), 2));
+    let f = inst.spawn("main", &[]).unwrap();
+    assert_eq!(inst.resume_units(f, &mut (), 5), (Exit::Trap(Trap::Unreachable), 3));
+    assert_eq!(inst.trap_location(f), Some((0, 2)));
+    let f = inst.spawn("main", &[]).unwrap();
+    assert_eq!(inst.resume_units(f, &mut (), 0), (Exit::OutOfBudget, 0));
 }
 
 #[test]
@@ -162,7 +190,7 @@ fn calls_cost_one_each() {
     let module = mb.finish().unwrap();
     let mut inst = plain(&module);
     let f = inst.spawn("main", &[]).unwrap();
-    assert_eq!(inst.resume_counted(f, &mut (), 100), (Exit::Done, 3));
+    assert_eq!(inst.resume_units(f, &mut (), 100), (Exit::Done, 3));
 }
 
 // ---------------------------------------------------------------- yield
@@ -206,9 +234,9 @@ fn yield_costs_one_and_zero_budget_does_not_yield() {
     });
     let mut inst = plain(&m);
     let f = inst.spawn("main", &[]).unwrap();
-    assert_eq!(inst.resume_counted(f, &mut (), 0), (Exit::OutOfBudget, 0));
-    assert_eq!(inst.resume_counted(f, &mut (), 10), (Exit::Yield, 1));
-    assert_eq!(inst.resume_counted(f, &mut (), 10), (Exit::Done, 1));
+    assert_eq!(inst.resume_units(f, &mut (), 0), (Exit::OutOfBudget, 0));
+    assert_eq!(inst.resume_units(f, &mut (), 10), (Exit::Yield, 1));
+    assert_eq!(inst.resume_units(f, &mut (), 10), (Exit::Done, 1));
 }
 
 #[test]
@@ -390,7 +418,9 @@ fn status_transitions_and_results() {
     assert_eq!(inst.resume(f, &mut (), 100), Exit::Yield);
     assert_eq!(inst.status(f), Some(FiberStatus::Suspended));
     assert_eq!(inst.results(f), None);
-    assert_eq!(inst.resume(f, &mut (), 1), Exit::OutOfBudget);
+    // the instruction after `yield` is a leader: budget 0 stops there (budget 1 would run
+    // the whole block [const, ret])
+    assert_eq!(inst.resume(f, &mut (), 0), Exit::OutOfBudget);
     assert_eq!(inst.status(f), Some(FiberStatus::Ready));
     assert_eq!(inst.results(f), None);
     assert_eq!(inst.resume(f, &mut (), 100), Exit::Done);
@@ -408,7 +438,7 @@ fn done_fiber_resumed_again_stays_done() {
     let f = inst.spawn("main", &[]).unwrap();
     assert_eq!(inst.resume(f, &mut (), 100), Exit::Done);
     for budget in [0u64, 1, 100] {
-        assert_eq!(inst.resume_counted(f, &mut (), budget), (Exit::Done, 0));
+        assert_eq!(inst.resume_units(f, &mut (), budget), (Exit::Done, 0));
         assert_eq!(inst.status(f), Some(FiberStatus::Done));
         assert_eq!(inst.results(f), Some(&[8u64][..]));
     }
@@ -430,7 +460,7 @@ fn trapped_fiber_resumed_again_gives_same_trap() {
     assert_eq!(inst.status(f), Some(FiberStatus::Trapped(Trap::DivideByZero)));
     assert_eq!(inst.results(f), None);
     assert_eq!(inst.resume(f, &mut (), 100), Exit::Trap(Trap::DivideByZero));
-    assert_eq!(inst.resume_counted(f, &mut (), 0), (Exit::Trap(Trap::DivideByZero), 0));
+    assert_eq!(inst.resume_units(f, &mut (), 0), (Exit::Trap(Trap::DivideByZero), 0));
 }
 
 #[test]
@@ -842,8 +872,8 @@ fn host_yield_costs_one_like_any_call() {
     let mut inst = Instance::new(&m, &imports.imports(), Limits::default()).unwrap();
     let mut st = St::default();
     let f = inst.spawn("main", &[]).unwrap();
-    assert_eq!(inst.resume_counted(f, &mut st, 100), (Exit::Yield, 1));
-    assert_eq!(inst.resume_counted(f, &mut st, 100), (Exit::Done, 1));
+    assert_eq!(inst.resume_units(f, &mut st, 100), (Exit::Yield, 1));
+    assert_eq!(inst.resume_units(f, &mut st, 100), (Exit::Done, 1));
 }
 
 #[test]

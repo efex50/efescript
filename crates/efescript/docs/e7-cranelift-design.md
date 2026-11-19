@@ -31,11 +31,20 @@ Main decisions:
    `corosensei`-style platform stack code is needed.
 4. **Budget is charged per basic block**, in both backends (a spec change, J0). The interpreter
    charges 1 unit per instruction and can stop between any two instructions. The JIT can't afford
-   that check. So the unit of "may stop here" becomes the basic block. Before a block runs, its
-   whole cost is charged, and if it does not fit, the fiber exits `OutOfBudget` *before* the
-   block. The interpreter is changed to do the same. Both backends then agree exactly on where a
-   budget exit happens. Bulk ops (`memory.copy/fill/grow`) keep their byte-based extra cost and
-   debt rule, charged when they run.
+   that check, so the unit of "may stop here" becomes the basic block. The rule, the same in both
+   backends:
+   - The budget is a signed counter during a run. On entering a block leader (including resuming
+     at one and returning to the instruction after a call), if the counter is `<= 0` the fiber
+     stops with `OutOfBudget` *at that leader*. Otherwise the block's cost (its instruction count)
+     is subtracted, and the block runs even if the counter goes negative.
+   - Bulk ops (`memory.copy/fill/grow`) subtract their extra byte-based cost the same way, with no
+     immediate exit.
+   - When a run ends with a negative counter, the overrun becomes the fiber's debt, paid first by
+     the next resume (the existing debt rule). So a budget smaller than a block never livelocks,
+     and both backends agree exactly on where every exit happens and on the units used.
+   - `Instance::step` (for the debugger) runs exactly one instruction and charges nothing. A fiber
+     stepped to the middle of a block is resumed by the interpreter, because every JIT resume
+     point is a leader.
 5. **`efevm` stays `#![forbid(unsafe_code)]`.** All `unsafe` (mapping code, calling it, the
    context pointer) lives in `efevm-jit`. `efevm` gains a small backend seam (section 3) but no
    unsafe and no Cranelift dependency.
@@ -91,8 +100,8 @@ fn f(vmctx: i64, window: i64, resume: i32) -> i32   // status
 - **Blocks.** A Cranelift block starts at instruction 0, at every label target and after every
   terminator, call, host call and `yield` (those are the suspension points). Each block's cost (its
   instruction count) is known at compile time.
-- **Budget.** Each block starts with `budget -= cost; if budget < 0 { budget += cost; suspend }`.
-  Two cheap instructions and a well-predicted branch. A later optimisation merges the checks of
+- **Budget.** Each block starts with `if budget <= 0 { suspend } budget -= cost` (section 0,
+  item 4). Two cheap instructions and a well-predicted branch. A later optimisation merges the checks of
   straight-line blocks with no back edge between them; the charge points are part of the spec, so
   this needs a spec rule too.
 - **Integer ops** map one to one (`iadd`, `imul`, `rotl`, `clz`, `popcnt`, `icmp` + `uextend`

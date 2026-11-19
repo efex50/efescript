@@ -6,10 +6,15 @@ fn ty(np: usize, nr: usize) -> FuncType {
     FuncType::new(vec![I64; np], vec![I64; nr])
 }
 
-fn module(np: usize, nregs: u16, body: impl FnOnce(&mut FunctionBuilder)) -> Module {
+fn module(np: usize, nregs: u16, split: bool, body: impl FnOnce(&mut FunctionBuilder)) -> Module {
     let mut mb = ModuleBuilder::new();
     let mut f = FunctionBuilder::new(nregs);
     body(&mut f);
+    if split {
+        let l = f.new_label();
+        f.jmp(l);
+        f.bind(l);
+    }
     f.ret(0);
     let id = mb.add_func(ty(np, 0), f);
     mb.export_func("main", id);
@@ -21,9 +26,12 @@ fn inst(m: &Module) -> Instance<()> {
     Instance::new(m, &Imports::<()>::new(), Limits::default()).unwrap()
 }
 
-/// `r0 = dst, r1 = src/value, r2 = len`, then the op (3 consts + op + ret).
-fn bulk(op: Op, len: u64) -> Module {
-    module(0, 3, |f| {
+/// `r0 = dst, r1 = src/value, r2 = len`, then the op.
+/// Blocks without `split`: `[const, const, const, op, ret]` (cost 5).
+/// With `split`: `[const, const, const, op, jmp]` (cost 5) and `[ret]` (cost 1), so there is a
+/// leader after the bulk op where an overrun can stop the fiber.
+fn bulk(op: Op, len: u64, split: bool) -> Module {
+    module(0, 3, split, |f| {
         f.const_i64(0, 0);
         f.const_i64(1, 0);
         f.const_i64(2, len as i64);
@@ -34,83 +42,97 @@ fn bulk(op: Op, len: u64) -> Module {
     })
 }
 
-fn grow(pages: u64) -> Module {
-    module(0, 2, |f| {
+/// Blocks without `split`: `[const, grow, ret]` (cost 3). With `split`: `[const, grow, jmp]`
+/// (cost 3) and `[ret]` (cost 1).
+fn grow(pages: u64, split: bool) -> Module {
+    module(0, 2, split, |f| {
         f.const_i64(1, pages as i64);
         f.memory_grow(0, 1);
     })
 }
 
-/// Smallest budget with which one resume ends in `Done` (binary search; monotonic).
-fn min_done(m: &Module) -> u64 {
-    let (mut lo, mut hi) = (0u64, 1u64 << 60);
-    while lo < hi {
-        let mid = lo + (hi - lo) / 2;
-        let mut i = inst(m);
-        let f = i.spawn("main", &[]).unwrap();
-        if i.resume(f, &mut (), mid) == Exit::Done {
-            hi = mid;
-        } else {
-            lo = mid + 1;
-        }
-    }
-    lo
+/// Runs the module's `main` with an unlimited budget; returns the units used.
+fn units_used(m: &Module) -> u64 {
+    let mut i = inst(m);
+    let f = i.spawn("main", &[]).unwrap();
+    let (e, n) = i.resume_units(f, &mut (), 1 << 50);
+    assert_eq!(e, Exit::Done);
+    n
 }
 
 #[test]
 fn bulk_cost_exact() {
-    // other instructions: 3 consts + ret = 4
-    for (len, cost) in [(0u64, 1u64), (255, 1), (256, 2), (511, 2), (512, 3), (1000, 4)] {
-        assert_eq!(min_done(&bulk(Op::MemoryCopy, len)), 4 + cost, "copy {len}");
-        assert_eq!(min_done(&bulk(Op::MemoryFill, len)), 4 + cost, "fill {len}");
+    // one block of 5 instructions plus the extra len / 256
+    for (len, extra) in [(0u64, 0u64), (255, 0), (256, 1), (511, 1), (512, 2), (1000, 3)] {
+        assert_eq!(units_used(&bulk(Op::MemoryCopy, len, false)), 5 + extra, "copy {len}");
+        assert_eq!(units_used(&bulk(Op::MemoryFill, len, false)), 5 + extra, "fill {len}");
     }
-    // grow: 1 const + ret = 2 other instructions; cost 1 + pages * 256
-    assert_eq!(min_done(&grow(0)), 2 + 1);
-    assert_eq!(min_done(&grow(1)), 2 + 257);
-    assert_eq!(min_done(&grow(3)), 2 + 1 + 3 * 256);
+    // grow: one block of 3 plus pages * 256
+    assert_eq!(units_used(&grow(0, false)), 3);
+    assert_eq!(units_used(&grow(1, false)), 3 + 256);
+    assert_eq!(units_used(&grow(3, false)), 3 + 3 * 256);
     // a failed grow (beyond max 4) is charged for the requested size
-    assert_eq!(min_done(&grow(100)), 2 + 1 + 100 * 256);
-    // saturating: an absurd request does not overflow; the fiber is left owing the excess
-    let mut i = inst(&grow(u64::MAX));
+    assert_eq!(units_used(&grow(100, false)), 3 + 100 * 256);
+    // saturating: an absurd request does not overflow; the whole budget is used up and the
+    // fiber is left owing the excess
+    let mut i = inst(&grow(u64::MAX, true));
     let f = i.spawn("main", &[]).unwrap();
-    assert_eq!(i.resume_counted(f, &mut (), u64::MAX), (Exit::OutOfBudget, 2));
+    assert_eq!(i.resume_units(f, &mut (), u64::MAX), (Exit::OutOfBudget, i64::MAX as u64));
+}
+
+#[test]
+fn bulk_op_never_exits_immediately() {
+    // The copy sits in the middle of a block: even with a budget of 1 the block (cost 5) and
+    // the whole bulk operation run, and the fiber stops only at the next leader.
+    let m = bulk(Op::MemoryFill, 2560, true);
+    let mut i = inst(&m);
+    i.memory_mut().write(0, &[0xEE; 8]).unwrap();
+    let f = i.spawn("main", &[]).unwrap();
+    // fill writes value r1 = 0 over [0, 2560)
+    assert_eq!(i.resume_units(f, &mut (), 1), (Exit::OutOfBudget, 1));
+    assert_eq!(&i.memory().as_slice()[..8], &[0u8; 8]);
+    assert_eq!(i.fiber_location(f), Some((0, 5)));
 }
 
 #[test]
 fn debt_is_carried_over_resumes() {
-    // copy of 2560 bytes: cost 11, extra 10
-    let m = bulk(Op::MemoryCopy, 2560);
+    // copy of 2560 bytes: extra 10. Blocks: [3 consts, copy, jmp] (5) and [ret] (1).
+    let m = bulk(Op::MemoryCopy, 2560, true);
     let mut i = inst(&m);
     let f = i.spawn("main", &[]).unwrap();
-    // 3 consts + copy's own 1 = 4 instructions; 4 more units left, extra 10 -> debt 6
-    assert_eq!(i.resume_counted(f, &mut (), 8), (Exit::OutOfBudget, 4));
+    // 8 - 5 = 3, extra 10 -> -7 at the leader of `ret`: stop, debt 7, all 8 units used
+    assert_eq!(i.resume_units(f, &mut (), 8), (Exit::OutOfBudget, 8));
     assert_eq!(i.status(f), Some(FiberStatus::Ready));
-    // budget smaller than debt: nothing executes
-    assert_eq!(i.resume_counted(f, &mut (), 2), (Exit::OutOfBudget, 0));
-    assert_eq!(i.resume_counted(f, &mut (), 0), (Exit::OutOfBudget, 0));
-    // budget equal to the remaining debt (4): still nothing executes
-    assert_eq!(i.resume_counted(f, &mut (), 4), (Exit::OutOfBudget, 0));
+    // budget smaller than debt: nothing executes, debt 5
+    assert_eq!(i.resume_units(f, &mut (), 2), (Exit::OutOfBudget, 2));
+    assert_eq!(i.resume_units(f, &mut (), 0), (Exit::OutOfBudget, 0));
+    // budget equal to the remaining debt (5): still nothing executes
+    assert_eq!(i.resume_units(f, &mut (), 5), (Exit::OutOfBudget, 5));
     // debt is zero: ret runs
-    assert_eq!(i.resume_counted(f, &mut (), 1), (Exit::Done, 1));
+    assert_eq!(i.resume_units(f, &mut (), 1), (Exit::Done, 1));
 }
 
 #[test]
 fn debt_then_larger_budget_runs_the_rest() {
-    let m = bulk(Op::MemoryFill, 2560);
+    let m = bulk(Op::MemoryFill, 2560, true);
     let mut i = inst(&m);
     let f = i.spawn("main", &[]).unwrap();
-    assert_eq!(i.resume_counted(f, &mut (), 8), (Exit::OutOfBudget, 4)); // debt 6
-    assert_eq!(i.resume_counted(f, &mut (), 100), (Exit::Done, 1));
+    assert_eq!(i.resume_units(f, &mut (), 8), (Exit::OutOfBudget, 8)); // debt 7
+    // pays 7, then runs ret (cost 1)
+    assert_eq!(i.resume_units(f, &mut (), 100), (Exit::Done, 8));
 }
 
 #[test]
 fn bulk_op_over_budget_still_completes() {
     let mut mb = ModuleBuilder::new();
     let mut f = FunctionBuilder::new(3);
+    let l = f.new_label();
     f.const_i64(0, 0);
     f.const_i64(1, 0xAB);
     f.const_i64(2, 1000);
     f.memory_fill(0, 1, 2);
+    f.jmp(l);
+    f.bind(l);
     f.ret(0);
     let id = mb.add_func(ty(0, 0), f);
     mb.export_func("main", id);
@@ -118,47 +140,48 @@ fn bulk_op_over_budget_still_completes() {
     let m = mb.finish().unwrap();
     let mut i = inst(&m);
     let fb = i.spawn("main", &[]).unwrap();
-    // fill's cost 4 > the 1 unit left after the consts
+    // block cost 5 and fill's extra 3 exceed the 4 units given: 4 - 5 - 3 = -4
     assert_eq!(i.resume(fb, &mut (), 4), Exit::OutOfBudget);
     assert!(i.memory().as_slice()[..1000].iter().all(|&b| b == 0xAB));
 }
 
 #[test]
 fn exact_budget_leaves_no_debt() {
-    // cost exactly equals the budget left: no debt, OutOfBudget comes from budget 0 next
-    let m = bulk(Op::MemoryCopy, 512); // cost 3
+    // block 5 + extra 2 equal the budget: the counter is 0, no debt; the stop at the leader
+    // of `ret` comes from counter 0
+    let m = bulk(Op::MemoryCopy, 512, true);
     let mut i = inst(&m);
     let f = i.spawn("main", &[]).unwrap();
-    assert_eq!(i.resume_counted(f, &mut (), 6), (Exit::OutOfBudget, 4));
-    assert_eq!(i.resume_counted(f, &mut (), 1), (Exit::Done, 1));
+    assert_eq!(i.resume_units(f, &mut (), 7), (Exit::OutOfBudget, 7));
+    assert_eq!(i.resume_units(f, &mut (), 1), (Exit::Done, 1));
 }
 
 #[test]
-fn trapping_bulk_op_costs_one_and_no_debt() {
+fn trapping_bulk_op_costs_its_block_and_no_debt() {
     for (op, len) in [
         (Op::MemoryCopy, 70_000u64),
         (Op::MemoryFill, 70_000),
         (Op::MemoryCopy, 1 << 40),
         (Op::MemoryFill, u64::MAX),
     ] {
-        let m = bulk(op, len);
+        let m = bulk(op, len, false);
         let mut i = inst(&m);
         let f = i.spawn("main", &[]).unwrap();
-        // 3 consts + the trapping op = 4 units exactly, no OutOfBudget
-        assert_eq!(i.resume_counted(f, &mut (), 4), (Exit::Trap(Trap::OutOfBounds), 4), "{op:?} {len}");
-        assert_eq!(i.resume_counted(f, &mut (), 4), (Exit::Trap(Trap::OutOfBounds), 0));
+        // the whole block (5) is charged on entry; the trapping op adds nothing
+        assert_eq!(i.resume_units(f, &mut (), 5), (Exit::Trap(Trap::OutOfBounds), 5), "{op:?} {len}");
+        assert_eq!(i.resume_units(f, &mut (), 5), (Exit::Trap(Trap::OutOfBounds), 0));
     }
 }
 
 #[test]
 fn failed_grow_is_charged() {
-    let m = grow(100); // max 4 pages: fails, cost 1 + 25600
+    let m = grow(100, true); // max 4 pages: fails, extra 25600
     let mut i = inst(&m);
     let f = i.spawn("main", &[]).unwrap();
-    assert_eq!(i.resume_counted(f, &mut (), 100), (Exit::OutOfBudget, 2)); // const + grow
-    assert_eq!(i.resume_counted(f, &mut (), 25_600 - 98), (Exit::OutOfBudget, 0));
-    // debt was 25600 - 98 (units left after const and grow's own 1 are 98)
-    assert_eq!(i.resume_counted(f, &mut (), 1), (Exit::Done, 1));
+    // 100 - 3 - 25600 = -25503: stop at the leader of `ret`, debt 25503
+    assert_eq!(i.resume_units(f, &mut (), 100), (Exit::OutOfBudget, 100));
+    assert_eq!(i.resume_units(f, &mut (), 25_503), (Exit::OutOfBudget, 25_503));
+    assert_eq!(i.resume_units(f, &mut (), 1), (Exit::Done, 1));
 }
 
 #[test]
@@ -220,7 +243,7 @@ fn stack_released_after_trap() {
 
 #[test]
 fn stack_kept_while_suspended() {
-    let m = module(0, 2, |f| f.yield_());
+    let m = module(0, 2, false, |f| f.yield_());
     let mut i = inst(&m);
     let f = i.spawn("main", &[]).unwrap();
     assert_eq!(i.resume(f, &mut (), 10), Exit::Yield);
@@ -263,6 +286,9 @@ fn call_module() -> Module {
     bk.const_i64(1, 0);
     bk.const_i64(2, 25_600);
     bk.memory_fill(0, 1, 2);
+    let after = bk.new_label();
+    bk.jmp(after); // a leader after the fill, where the overrun stops the fiber
+    bk.bind(after);
     bk.ret(0);
     let bid = mb.add_func(ty(0, 0), bk);
     mb.export_func("fill", bid);
@@ -296,7 +322,7 @@ fn call_out_of_budget_yield_and_spawn_errors() {
     assert_eq!(i.call("spin", &[], &mut (), 1000), Err(CallError::OutOfBudget));
     assert_eq!(i.call("add", &[1, 2], &mut (), 0), Err(CallError::OutOfBudget));
     assert_eq!(i.call("yield", &[], &mut (), 100), Err(CallError::Yield));
-    // fill of 25600 bytes costs 101, budget 50: debt, reported as OutOfBudget
+    // fill of 25600 bytes: block 5 + extra 100 > budget 50: debt, stop at the leader of `ret`
     assert_eq!(i.call("fill", &[], &mut (), 50), Err(CallError::OutOfBudget));
     assert_eq!(i.call("nope", &[], &mut (), 10), Err(CallError::Spawn(SpawnError::NoSuchExport)));
     assert_eq!(
@@ -325,8 +351,8 @@ fn call_frees_the_fiber_slot() {
 
 #[test]
 fn resume_units_accounts_bulk_yield_and_debt() {
-    // consts(3), fill of 2560 (cost 11), yield, ret
-    let m = module(0, 3, |f| {
+    // consts(3), fill of 2560 (extra 10), yield, ret
+    let m = module(0, 3, false, |f| {
         f.const_i64(0, 0);
         f.const_i64(1, 0);
         f.const_i64(2, 2560);
@@ -336,17 +362,17 @@ fn resume_units_accounts_bulk_yield_and_debt() {
     let mut i = inst(&m);
     let f = i.spawn("main", &[]).unwrap();
     assert_eq!(i.resume_units(f, &mut (), 0), (Exit::OutOfBudget, 0));
-    // fits in the budget: 3 + 11 + yield(1) = 15 units
+    // fits in the budget: block 5 + extra 10 = 15 units
     assert_eq!(i.resume_units(f, &mut (), 100), (Exit::Yield, 15));
     assert_eq!(i.resume_units(f, &mut (), 100), (Exit::Done, 1));
     assert_eq!(i.resume_units(f, &mut (), 100), (Exit::Done, 0));
-    // over budget: all 8 units consumed, debt 6 paid in later resumes and counted
+    // over budget: blocks [3 consts, fill, yield] (5) and [ret] (1). 8 - 5 - 10 = -7: the yield
+    // still runs (same block), all 8 units are consumed and debt 7 is paid in later resumes
     let mut i = inst(&m);
     let f = i.spawn("main", &[]).unwrap();
-    assert_eq!(i.resume_units(f, &mut (), 8), (Exit::OutOfBudget, 8));
+    assert_eq!(i.resume_units(f, &mut (), 8), (Exit::Yield, 8));
     assert_eq!(i.resume_units(f, &mut (), 4), (Exit::OutOfBudget, 4));
-    // debt 2 left: paid 2, then yield (1)
-    assert_eq!(i.resume_units(f, &mut (), 10), (Exit::Yield, 3));
-    assert_eq!(i.resume_units(f, &mut (), 10), (Exit::Done, 1));
-    // total = 8 + 4 + 3 + 1 = 16 = 3 + 11 + yield + ret
+    // debt 3 left: paid 3, then ret (1)
+    assert_eq!(i.resume_units(f, &mut (), 10), (Exit::Done, 4));
+    // total = 8 + 4 + 4 = 16 = 5 + 10 + ret
 }

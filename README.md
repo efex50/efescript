@@ -1,6 +1,6 @@
 > **Mirror.** This repository is generated from
-> [efeengine](https://github.com/efex50/efeengine) (`crates/efescript`, `efevm`, `efa`,
-> `efemod`, `calc`) by `scripts/sync_efescript.py`. Send changes there; edits here are
+> [efeengine](https://github.com/efex50/efeengine) (`crates/efescript`, `efevm`, `efevm-jit`,
+> `efa`, `efemod`, `calc`) by `scripts/sync_efescript.py`. Send changes there; edits here are
 > overwritten by the next sync.
 
 # efescript

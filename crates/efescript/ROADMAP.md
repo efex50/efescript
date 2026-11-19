@@ -166,8 +166,9 @@ Needs the world, `Commands` and type registry of repository roadmap 3.2–3.4; t
 
 ### E7: Compilers
 Native code through Cranelift, design in `docs/e7-cranelift-design.md` (phases J0–J8 there). A new crate `crates/efevm-jit` (native only, all `unsafe` there; `efevm` stays `forbid(unsafe_code)`), observably identical to the interpreter.
-- [ ] E7.1 Spec and seam (J0): budget charged per basic block in both backends, suspension points and the fiber frame layout as a public contract, a `Backend` trait in `efevm`.
-- [ ] E7.2 JIT (J1–J4): registers as `i64` Cranelift variables, explicit trap branches, host calls through a trampoline, stackless suspension and re-entry so fibers stay plain data and can move between backends.
+- [x] E7.1 Spec and seam (J0): budget charged per basic block in both backends, suspension points and the fiber frame layout as a public contract, a `Backend` trait in `efevm`.
+- [x] E7.2 JIT (J1–J4): registers as `i64` Cranelift variables, explicit trap branches, host calls through a trampoline, stackless suspension and re-entry so fibers stay plain data and can move between backends.
+  Done in `crates/efevm-jit` (Cranelift 0.137.2): all 181 ops, `compile`/`JitBackend`/`enable`, a native-stack limit that hands deep recursion to the interpreter, differential tests against the interpreter (ops, memory, calls and hosts, limits, the efescript examples). About 5–7x faster than the interpreter (0.47 vs 3.15 ns/instruction on a counting loop). Known gaps: x86-64 only tested, a host panic aborts, not yet fuzzed.
 - [ ] E7.3 Engine integration and proof (J5–J6): feature `jit`, backend choice in `EngineConfig`, `Grant.jit` for mods (off until differential fuzzing has run), differential tests and fuzzing against the interpreter, benchmarks. Later: typing, tiering, AOT through `cranelift-object` (J7–J8). The browser keeps the interpreter.
 - [ ] E7.4 wasm → efescript translator, so Rust, C and others can target the VM. Needs E1.6, E1.7 and E3 complete.
 

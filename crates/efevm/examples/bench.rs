@@ -71,7 +71,7 @@ fn report(name: &str, samples: &[Sample]) {
 fn bench_full(inst: &mut Instance<()>, n: i64) -> Sample {
     let fiber = inst.spawn("count", &[n as u64]).expect("spawn count");
     let start = Instant::now();
-    let (exit, executed) = inst.resume_counted(fiber, &mut (), u64::MAX);
+    let (exit, executed) = inst.resume_units(fiber, &mut (), u64::MAX);
     let elapsed = start.elapsed();
     check_done(inst, fiber, exit, n);
     inst.remove_fiber(fiber);
@@ -84,7 +84,7 @@ fn bench_budgeted(inst: &mut Instance<()>, n: i64) -> Sample {
     let mut total = 0u64;
     let start = Instant::now();
     let exit = loop {
-        let (exit, executed) = inst.resume_counted(fiber, &mut (), RESUME_BUDGET);
+        let (exit, executed) = inst.resume_units(fiber, &mut (), RESUME_BUDGET);
         total += executed;
         match exit {
             Exit::OutOfBudget => continue,

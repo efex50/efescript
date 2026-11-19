@@ -2,6 +2,7 @@
 #![forbid(unsafe_code)]
 
 pub mod api;
+pub mod backend;
 pub mod binary;
 pub mod builder;
 pub mod error;
@@ -13,7 +14,7 @@ pub mod types;
 mod verify;
 pub mod imports;
 pub mod instance;
-pub mod interp;
+mod interp;
 pub mod memory;
 
 pub use api::{

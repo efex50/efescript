@@ -1,78 +1,14 @@
 //! The interpreter loop (SPEC.md sections 5-7).
 
-use crate::instance::FiberId;
-use crate::imports::{Caller, HostFunc, HostOk};
-use crate::memory::Memory;
-use crate::module::{Inst, ModuleData};
+use crate::backend::{FiberStack, Frame, RunCx, invoke_host};
+use crate::imports::HostOk;
+use crate::module::Inst;
 use crate::op::Op;
 use crate::trap::{Exit, Trap};
-use crate::types::{Limits, PAGE_SIZE};
-
-/// Per-function data precomputed at instantiation (whole function index space).
-#[derive(Clone, Copy, Debug)]
-pub(crate) struct FuncInfo {
-    pub np: u32,
-    pub nr: u32,
-    pub nregs: u32,
-    /// Structural type id: equal for equal `FuncType`s.
-    pub canon: u32,
-}
+use crate::types::PAGE_SIZE;
 
 /// Bytes per extra budget unit for `memory.copy`, `memory.fill` and `memory.grow`.
 pub(crate) const BULK_UNIT_BYTES: u64 = 256;
-
-/// A suspended caller activation.
-#[derive(Clone, Copy, Debug)]
-pub(crate) struct Frame {
-    func: u32,
-    /// Return pc in the caller.
-    pc: u32,
-    /// Caller's frame base.
-    fp: u32,
-    /// Caller's call window base (where results go).
-    base: u32,
-}
-
-impl Frame {
-    /// `(caller function, index of the call instruction)`.
-    pub(crate) fn call_site(&self) -> (u32, u32) {
-        (self.func, self.pc.saturating_sub(1))
-    }
-}
-
-/// A fiber's execution state.
-#[derive(Debug, Default)]
-pub(crate) struct Stack {
-    pub regs: Vec<u64>,
-    pub frames: Vec<Frame>,
-    pub scratch: Vec<u64>,
-    pub func: u32,
-    pub pc: u32,
-    pub fp: u32,
-    pub results: Vec<u64>,
-    /// Call stack (func, inst) of the trap, innermost first; set on the trap exit path.
-    pub trace: Vec<(u32, u32)>,
-    /// Budget units still owed by bulk memory operations that overran an earlier budget.
-    pub debt: u64,
-    /// Extra units (beyond the base 1 per instruction) charged by bulk operations during the
-    /// current `run`; the caller reads and resets it to report an instruction count.
-    pub extra: u64,
-}
-
-/// Immutable instance data the loop needs.
-pub(crate) struct Env<'a, H> {
-    pub data: &'a ModuleData,
-    pub infos: &'a [FuncInfo],
-    pub hosts: &'a [HostFunc<H>],
-    /// canonical type id per type index
-    pub type_canon: &'a [u32],
-    pub gmut: &'a [bool],
-    /// per global: mask applied to embedder-written values (32-bit types keep the low half)
-    pub gmask: &'a [u64],
-    /// per import: mask per result applied to host results
-    pub res_masks: &'a [Box<[u64]>],
-    pub limits: Limits,
-}
 
 #[inline(always)]
 fn f32v(x: u64) -> f32 {
@@ -210,33 +146,42 @@ fn t_i64_f64_u(x: f64) -> Result<u64, Trap> {
     }
 }
 
-/// Runs a fiber until it exits. Returns the exit and the budget left.
-/// On `Exit::Done` the results are in `st.results`. On `Yield`/`OutOfBudget` the position is saved
-/// in `st` so the fiber can be resumed.
-pub(crate) fn run<H>(
-    env: &Env<'_, H>,
-    memory: &mut Memory,
-    globals: &mut [u64],
-    host: &mut H,
-    fiber: FiberId,
-    st: &mut Stack,
-    mut budget: u64,
-) -> (Exit, u64) {
-    let Stack { regs, frames, scratch, func: st_func, pc: st_pc, fp: st_fp, results, trace, debt, extra } =
-        st;
-    let nimports = env.data.imports.len();
+/// Runs a fiber until it exits. Returns the exit and the final budget counter (negative when
+/// the last block or a bulk operation overran it; the caller turns that into debt).
+/// The budget is a signed counter charged per basic block (SPEC section 5): at a leader,
+/// a counter `<= 0` exits `OutOfBudget` there, otherwise the block's cost is subtracted.
+///
+/// With `STEP` the run executes exactly one instruction without charging anything and returns
+/// `OutOfBudget` if the fiber is still runnable.
+///
+/// On `Exit::Done` the results are in `st.results`. On `Yield`/`OutOfBudget` the position is
+/// saved in `st` so the fiber can be resumed.
+pub(crate) fn run<H, const STEP: bool>(
+    cx: &mut RunCx<'_, H>,
+    st: &mut FiberStack,
+    mut budget: i64,
+) -> (Exit, i64) {
+    let FiberStack { regs, frames, scratch, func: st_func, pc: st_pc, fp: st_fp, results, trace, debt: _ } = st;
+    let RunCx { module, infos, type_canon, limits, memory, globals, fiber, host, hosts, gmut, gmask, res_masks } =
+        cx;
+    let (memory, globals, host): (&mut crate::memory::Memory, &mut [u64], &mut H) =
+        (&mut **memory, &mut **globals, &mut **host);
+    let module: &crate::module::Module = module;
+    let data = module.data();
+    let (infos, type_canon, limits, fiber): (&[_], &[u32], _, _) = (infos, type_canon, *limits, *fiber);
+    let (hosts, gmut, gmask, res_masks) = (*hosts, *gmut, *gmask, *res_masks);
+    let nimports = data.imports.len();
     let mut func = *st_func;
     let mut pc = *st_pc as usize;
     let mut fp = *st_fp as usize;
 
     let empty: &[Inst] = &[];
-    let mut code: &[Inst] = match (func as usize)
-        .checked_sub(nimports)
-        .and_then(|i| env.data.functions.get(i))
-    {
+    let mut code: &[Inst] = match (func as usize).checked_sub(nimports).and_then(|i| data.functions.get(i)) {
         Some(f) => &f.code,
         None => empty,
     };
+    // Cost per pc of the current function: nonzero exactly at block leaders.
+    let mut cost: &[u32] = module.cost_table(func);
     let mut f: &mut [u64] = match regs.get_mut(fp..) {
         Some(s) => s,
         None => return (Exit::Trap(Trap::Unreachable), budget),
@@ -260,19 +205,12 @@ pub(crate) fn run<H>(
             return (Exit::Trap(t), budget);
         }};
     }
-    // Charges the units of a bulk operation beyond the 1 already paid. When they exceed the
-    // remaining budget, the budget becomes 0, the excess becomes debt, and the fiber stops.
+    // Subtracts the extra units of a bulk operation (beyond its block cost). No immediate
+    // exit: a counter that goes negative stops the fiber at the next leader.
     macro_rules! charge {
         ($units:expr) => {{
             let units: u64 = $units;
-            if units > budget {
-                *extra = extra.saturating_add(budget);
-                *debt = units - budget;
-                save!();
-                return (Exit::OutOfBudget, 0);
-            }
-            *extra += units;
-            budget -= units;
+            budget = budget.saturating_sub(units.min(i64::MAX as u64) as i64);
         }};
     }
     macro_rules! tr {
@@ -360,11 +298,18 @@ pub(crate) fn run<H>(
     }
 
     loop {
-        if budget == 0 {
-            save!();
-            return (Exit::OutOfBudget, 0);
+        if !STEP {
+            // A nonzero cost marks a leader; every instruction passes here once per execution,
+            // so a block is charged exactly once per entry.
+            let c = cost.get(pc).copied().unwrap_or(0);
+            if c != 0 {
+                if budget <= 0 {
+                    save!();
+                    return (Exit::OutOfBudget, budget);
+                }
+                budget -= c as i64;
+            }
         }
-        budget -= 1;
         let inst: Inst = match code.get(pc) {
             Some(i) => *i,
             None => {
@@ -382,7 +327,7 @@ pub(crate) fn run<H>(
             }
             Op::Ret => {
                 let base = inst.a as usize;
-                let nr = env.infos.get(func as usize).map_or(0, |i| i.nr as usize);
+                let nr = infos.get(func as usize).map_or(0, |i| i.nr as usize);
                 if base + nr > f.len() {
                     trap!(Trap::OutOfBounds);
                 }
@@ -400,13 +345,11 @@ pub(crate) fn run<H>(
                         func = fr.func;
                         pc = fr.pc as usize;
                         fp = fr.fp as usize;
-                        code = match (func as usize)
-                            .checked_sub(nimports)
-                            .and_then(|i| env.data.functions.get(i))
-                        {
+                        code = match (func as usize).checked_sub(nimports).and_then(|i| data.functions.get(i)) {
                             Some(fun) => &fun.code,
                             None => trap!(Trap::Unreachable),
                         };
+                        cost = module.cost_table(func);
                         f = match regs.get_mut(fp..) {
                             Some(s) => s,
                             None => trap!(Trap::Unreachable),
@@ -427,8 +370,7 @@ pub(crate) fn run<H>(
             }
             Op::BrTable => {
                 let idx = f[inst.a as usize] as u32 as usize;
-                let tab = match env
-                    .data
+                let tab = match data
                     .functions
                     .get((func as usize).wrapping_sub(nimports))
                     .and_then(|fun| fun.br_tables.get(inst.b as usize))
@@ -444,18 +386,18 @@ pub(crate) fn run<H>(
                     (inst.a, inst.b as usize)
                 } else {
                     let idx = f[inst.b as usize] as u32 as usize;
-                    let g = match env.data.table.get(idx) {
+                    let g = match data.table.get(idx) {
                         Some(Some(g)) => *g,
                         _ => trap!(Trap::UndefinedElement),
                     };
-                    let want = env.type_canon.get(inst.a as usize).copied();
-                    let have = env.infos.get(g as usize).map(|i| i.canon);
+                    let want = type_canon.get(inst.a as usize).copied();
+                    let have = infos.get(g as usize).map(|i| i.canon);
                     if want.is_none() || want != have {
                         trap!(Trap::IndirectCallTypeMismatch);
                     }
                     (g, inst.c as usize)
                 };
-                let info = match env.infos.get(g as usize) {
+                let info = match infos.get(g as usize) {
                     Some(i) => *i,
                     None => trap!(Trap::Unreachable),
                 };
@@ -467,24 +409,22 @@ pub(crate) fn run<H>(
                     // Host call.
                     scratch.clear();
                     scratch.resize(nr, 0);
-                    let hf = match env.hosts.get(g as usize) {
-                        Some(h) => h,
-                        None => trap!(Trap::Unreachable),
-                    };
-                    let r = {
-                        let mut caller = Caller::new(&mut *host, &mut *memory, &mut *globals, env.gmut, env.gmask, fiber);
-                        hf(&mut caller, &f[base..base + np], &mut scratch[..])
-                    };
+                    let r = invoke_host(
+                        hosts,
+                        res_masks,
+                        &mut *host,
+                        &mut *memory,
+                        &mut *globals,
+                        gmut,
+                        gmask,
+                        fiber,
+                        g,
+                        &f[base..base + np],
+                        &mut scratch[..],
+                    );
                     match r {
                         Ok(k) => {
-                            match env.res_masks.get(g as usize) {
-                                Some(m) if m.len() == nr => {
-                                    for ((d, s), k) in f[base..base + nr].iter_mut().zip(&scratch[..nr]).zip(m.iter()) {
-                                        *d = *s & *k;
-                                    }
-                                }
-                                _ => trap!(Trap::Unreachable),
-                            }
+                            f[base..base + nr].copy_from_slice(&scratch[..nr]);
                             if k == HostOk::Yield {
                                 save!();
                                 return (Exit::Yield, budget);
@@ -493,13 +433,13 @@ pub(crate) fn run<H>(
                         Err(t) => trap!(t),
                     }
                 } else {
-                    if frames.len() as u64 + 2 > env.limits.max_call_depth as u64 {
+                    if frames.len() as u64 + 2 > limits.max_call_depth as u64 {
                         trap!(Trap::StackOverflow);
                     }
                     let size = (info.nregs as usize).max(np);
                     let new_fp = fp + f.len();
                     let total = new_fp + size;
-                    if total as u64 > env.limits.max_registers as u64 {
+                    if total as u64 > limits.max_registers as u64 {
                         trap!(Trap::StackOverflow);
                     }
                     if total > regs.capacity() && regs.try_reserve(total.saturating_sub(regs.len())).is_err() {
@@ -511,10 +451,11 @@ pub(crate) fn run<H>(
                     func = g;
                     fp = new_fp;
                     pc = 0;
-                    code = match env.data.functions.get(g as usize - nimports) {
+                    code = match data.functions.get(g as usize - nimports) {
                         Some(fun) => &fun.code,
                         None => trap!(Trap::Unreachable),
                     };
+                    cost = module.cost_table(g);
                     f = match regs.get_mut(fp..) {
                         Some(s) => s,
                         None => trap!(Trap::Unreachable),
@@ -777,6 +718,10 @@ pub(crate) fn run<H>(
             Op::F64PromoteF32 => f32u!(inst, |x| pf64(x as f64)),
             Op::I32ReinterpretF32 | Op::F32ReinterpretI32 => u64u!(inst, |x| x & 0xFFFF_FFFF),
             Op::I64ReinterpretF64 | Op::F64ReinterpretI64 => u64u!(inst, |x| x),
+        }
+        if STEP {
+            save!();
+            return (Exit::OutOfBudget, budget);
         }
     }
 }
