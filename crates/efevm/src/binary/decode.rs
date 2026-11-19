@@ -151,13 +151,18 @@ impl<'a> Reader<'a> {
 pub(crate) fn decode(bytes: &[u8]) -> Result<ModuleData, LoadError> {
     let mut r = Reader::new(bytes, 0);
     let magic = r.take(4).map_err(|_| r.err_at(0, DecodeError::UnexpectedEnd))?;
-    if magic != b"EFVM" {
+    if magic != super::MAGIC {
         return Err(r.err_at(0, DecodeError::BadMagic));
     }
     let [v0, v1] = r.array::<2>().map_err(|_| r.err_at(4, DecodeError::UnexpectedEnd))?;
     let version = u16::from_le_bytes([v0, v1]);
-    if version != 1 {
+    if version != super::VERSION {
         return Err(r.err_at(4, DecodeError::BadVersion(version)));
+    }
+    let stored = u32::from_le_bytes(r.array::<4>().map_err(|_| r.err_at(6, DecodeError::UnexpectedEnd))?);
+    let computed = super::checksum(bytes);
+    if stored != computed {
+        return Err(r.err_at(6, DecodeError::BadChecksum { stored, computed }));
     }
 
     let mut m = ModuleData::default();
@@ -608,7 +613,13 @@ mod tests {
     }
 
     fn header() -> Vec<u8> {
-        b"EFVM\x01\x00".to_vec()
+        sealed(b"EFVM\x02\x00\0\0\0\0".to_vec())
+    }
+
+    /// Fills in the header checksum (a no-op for inputs shorter than the header).
+    fn sealed(mut b: Vec<u8>) -> Vec<u8> {
+        crate::binary::seal(&mut b);
+        b
     }
 
     fn section(id: u8, payload: &[u8]) -> Vec<u8> {
@@ -623,11 +634,12 @@ mod tests {
         for s in sections {
             o.extend_from_slice(s);
         }
-        o
+        sealed(o)
     }
 
+    /// Decodes `bytes` with a correct checksum, so the error comes from the part under test.
     fn dec_err(bytes: &[u8]) -> (u64, DecodeError) {
-        match decode(bytes) {
+        match decode(&sealed(bytes.to_vec())) {
             Err(LoadError::Decode { offset, error }) => (offset, error),
             other => panic!("expected decode error, got {other:?}"),
         }
@@ -802,11 +814,47 @@ mod tests {
 
     #[test]
     fn bad_magic_and_version() {
-        assert_eq!(dec_err(b"EFVN\x01\x00"), (0, DecodeError::BadMagic));
-        assert_eq!(dec_err(b"EFVM\x02\x00"), (4, DecodeError::BadVersion(2)));
+        assert_eq!(dec_err(b"EFVN\x02\x00"), (0, DecodeError::BadMagic));
+        assert_eq!(dec_err(b"EFVM\x01\x00\0\0\0\0"), (4, DecodeError::BadVersion(1)));
+        assert_eq!(dec_err(b"EFVM\x03\x00"), (4, DecodeError::BadVersion(3)));
         assert_eq!(dec_err(b""), (0, DecodeError::UnexpectedEnd));
         assert_eq!(dec_err(b"EFV"), (0, DecodeError::UnexpectedEnd));
-        assert_eq!(dec_err(b"EFVM\x01"), (4, DecodeError::UnexpectedEnd));
+        assert_eq!(dec_err(b"EFVM\x02"), (4, DecodeError::UnexpectedEnd));
+        assert_eq!(dec_err(b"EFVM\x02\x00\0\0"), (6, DecodeError::UnexpectedEnd));
+    }
+
+    #[test]
+    fn checksum_detects_corruption() {
+        let full = full_module();
+        assert!(decode(&full).is_ok());
+        let computed = crate::binary::checksum(&full);
+        // Any flipped bit after the header is caught before the sections are read.
+        for i in [crate::binary::HEADER_LEN, full.len() / 2, full.len() - 1] {
+            let mut b = full.clone();
+            b[i] ^= 0x10;
+            let (offset, e) = match decode(&b) {
+                Err(LoadError::Decode { offset, error }) => (offset, error),
+                other => panic!("{other:?}"),
+            };
+            assert_eq!(offset, 6);
+            assert_eq!(e, DecodeError::BadChecksum { stored: computed, computed: crate::binary::checksum(&b) });
+        }
+        // A wrong stored value is caught too; truncation and appended bytes as well.
+        let mut b = full.clone();
+        b[6] ^= 1;
+        assert!(matches!(dec_kind(&b), DecodeError::BadChecksum { .. }));
+        assert!(matches!(dec_kind(&full[..full.len() - 1]), DecodeError::BadChecksum { .. }));
+        assert!(matches!(dec_kind(&[full.as_slice(), &[128, 0]].concat()), DecodeError::BadChecksum { .. }));
+        // The empty-section checksum is CRC-32 of nothing.
+        assert_eq!(header()[6..], 0u32.to_le_bytes());
+    }
+
+    /// Decodes `bytes` as given (no re-sealing).
+    fn dec_kind(bytes: &[u8]) -> DecodeError {
+        match decode(bytes) {
+            Err(LoadError::Decode { error, .. }) => error,
+            other => panic!("expected decode error, got {other:?}"),
+        }
     }
 
     #[test]
@@ -840,7 +888,7 @@ mod tests {
     #[test]
     fn size_mismatch_and_truncation() {
         // size larger than input
-        assert_eq!(err_kind(&[b"EFVM\x01\x00".as_slice(), &[5, 9, 0]].concat()), DecodeError::UnexpectedEnd);
+        assert_eq!(err_kind(&[header().as_slice(), &[5, 9, 0]].concat()), DecodeError::UnexpectedEnd);
         // payload with leftover bytes
         assert_eq!(
             err_kind(&module(&[section(5, &cat(&[&[0], &u(1), &[0]]))])),
@@ -981,6 +1029,10 @@ mod tests {
                 if b.is_empty() {
                     b.push(0);
                 }
+            }
+            // Re-seal half of the mutants so they get past the checksum into the sections.
+            if rng.next() % 2 == 0 {
+                crate::binary::seal(&mut b);
             }
             let _ = decode(&b);
             let _ = crate::Module::decode(&b);

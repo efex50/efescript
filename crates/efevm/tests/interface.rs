@@ -4,7 +4,15 @@
 use efevm::binary::{decode, encode};
 use efevm::*;
 
-const HEADER: &[u8] = b"EFVM\x01\x00";
+/// Header of an empty module: magic, version 2, checksum (CRC-32 of nothing is 0).
+const HEADER: &[u8] = b"EFVM\x02\x00\0\0\0\0";
+
+/// A copy of `b` with its header checksum recomputed, for hand-built or spliced bytes.
+fn sealed(b: &[u8]) -> Vec<u8> {
+    let mut b = b.to_vec();
+    efevm::binary::seal(&mut b);
+    b
+}
 
 /// Function indices of `base()`: import 0, `take` 1, `twice` 2.
 const IMPORT: u32 = 0;
@@ -126,11 +134,12 @@ fn section13(payload: &[u8]) -> Vec<u8> {
     b.push(13);
     b.extend(uleb(payload.len() as u64));
     b.extend_from_slice(payload);
-    b
+    sealed(&b)
 }
 
+/// Decodes `bytes` after sealing them, so the error comes from the part under test.
 fn decode_err(bytes: &[u8]) -> DecodeError {
-    match decode(bytes) {
+    match decode(&sealed(bytes)) {
         Err(LoadError::Decode { error, .. }) => error,
         other => panic!("expected a decode error, got {other:?}"),
     }
@@ -154,7 +163,7 @@ fn valid_interface_verifies_and_round_trips() {
 fn empty_interface_is_written_and_none_is_not() {
     let empty = ModuleData { interface: Some(Interface::default()), ..Default::default() };
     let bytes = encode(&empty);
-    assert_eq!(bytes, [HEADER, &[13, 4, 0, 0, 0, 0]].concat());
+    assert_eq!(bytes, sealed(&[HEADER, &[13, 4, 0, 0, 0, 0]].concat()));
     assert_eq!(decode(&bytes).unwrap(), empty);
     assert!(Module::new(empty).is_ok());
     assert_eq!(encode(&ModuleData::default()), HEADER);
@@ -457,6 +466,9 @@ fn mutated_interface_never_panics() {
             if b.is_empty() {
                 b.push(0);
             }
+        }
+        if next() % 4 != 0 {
+            efevm::binary::seal(&mut b);
         }
         let _ = Module::decode(&b);
     }

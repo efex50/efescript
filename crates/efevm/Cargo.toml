@@ -9,3 +9,5 @@ description = "Register-based bytecode VM for efescript (roadmap E1)"
 path = "src/lib.rs"
 
 [dependencies]
+# Header checksum of `.efvm` modules (SPEC.md 9). Pure Rust, wasm-clean.
+crc32fast = "1.5.5"

@@ -215,6 +215,9 @@ dependencies = [
 [[package]]
 name = "efevm"
 version = "0.1.0"
+dependencies = [
+ "crc32fast",
+]
 
 [[package]]
 name = "encoding_rs"

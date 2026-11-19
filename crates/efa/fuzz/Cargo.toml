@@ -1,0 +1,23 @@
+[package]
+name = "efa-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+license = "MIT"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+efa = { path = ".." }
+
+[[bin]]
+name = "build_mod"
+path = "fuzz_targets/build_mod.rs"
+test = false
+doc = false
+bench = false
+
+# Its own workspace: the fuzz crate is excluded from the root one.
+[workspace]

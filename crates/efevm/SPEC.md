@@ -1,6 +1,6 @@
 # efevm v1 specification
 
-Status: draft 6, 2026-11-15 (draft 1 plus the clarifications in "Changes from draft 1" and the changes in "Changes from draft 2", "Changes from draft 3", "Changes from draft 4" and "Changes from draft 5" at the end). This is roadmap item E1.1 (`crates/efescript/ROADMAP.md`).
+Status: draft 7, 2026-11-19 (draft 1 plus the clarifications in "Changes from draft 1" and the changes in "Changes from draft 2" through "Changes from draft 6" at the end). This is roadmap item E1.1 (`crates/efescript/ROADMAP.md`).
 `efevm` is the new core VM for efescript. It lives in its own crate (`crates/efevm`)
 next to the old VM in `crates/efescript`, which keeps working until the assembler
 moves over (E2).
@@ -194,9 +194,14 @@ pub enum Trap {
 Because registers are untyped 64-bit slots and memory is bounds-checked, a verified
 module cannot break host memory safety even if it mixes types.
 
-## 9. Binary format (`.efvm`, version 1)
+## 9. Binary format (`.efvm`, version 2)
 
-- Header: bytes `EFVM`, then `u16` little-endian version (`1`).
+- Header (10 bytes): bytes `EFVM`, then `u16` little-endian version (`2`), then a `u32`
+  little-endian checksum: CRC-32 (IEEE, the zlib/PNG polynomial) of every byte after the
+  header. The decoder checks magic, version and checksum, in that order, before reading any
+  section; a mismatch is `BadChecksum { stored, computed }` at offset 6. The checksum detects
+  corruption (truncated downloads, bad disks, hand edits); it is not a signature, so anyone can
+  recompute it (`efevm::binary::seal`). An empty module is the 10 header bytes, with checksum 0.
 - Then sections: `id: u8`, `size: uleb`, payload. Known ids in ascending order, each at
   most once: 1 types, 2 imports, 3 functions, 4 table, 5 memory, 6 globals, 7 exports,
   8 data, 9 code, 10 names, 11 lines, 12 api, 13 interface, 14 events. Unknown ids ≥ 128 are skipped (custom sections).
@@ -530,3 +535,14 @@ users).
 5. **Builder**: `ModuleBuilder::event_ref(namespace, name, payload) -> u32`.
 6. **API**: `EventDesc`, `HostRegistry::{register_event, replace_event, event, events}`, new
    `RegistryError` variants, `ApiIndex.events` and `.efapi` format version 2 (API_INDEX.md).
+
+## Changes from draft 6
+
+Draft 7 finishes efescript roadmap E2.1: the module checksum. The binary format version is
+now `2`; version 1 files are rejected (`BadVersion(1)`), with no compatibility kept.
+
+1. **Header** (9): 4 checksum bytes after the version, so sections start at offset 10.
+2. **Decoder**: `DecodeError::BadChecksum { stored, computed }`, checked before the sections.
+3. **API**: `binary::{MAGIC, VERSION, HEADER_LEN, checksum, seal}`. `encode` seals its
+   output; `seal` is for tools and tests that build or patch bytes by hand.
+4. **Engine**: the script cache's `CACHE_FORMAT` is 2, so old `efa/v1` disk caches are deleted.

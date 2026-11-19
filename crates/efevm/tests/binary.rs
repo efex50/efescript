@@ -7,7 +7,15 @@ use efevm::*;
 use std::collections::HashSet;
 use std::panic::{catch_unwind, resume_unwind, AssertUnwindSafe};
 
-const HEADER: &[u8] = b"EFVM\x01\x00";
+/// Header of an empty module: magic, version 2, checksum (CRC-32 of nothing is 0).
+const HEADER: &[u8] = b"EFVM\x02\x00\0\0\0\0";
+
+/// A copy of `b` with its header checksum recomputed, for hand-built or spliced bytes.
+fn sealed(b: &[u8]) -> Vec<u8> {
+    let mut b = b.to_vec();
+    efevm::binary::seal(&mut b);
+    b
+}
 
 // ---------------------------------------------------------------------------------------------
 // The big module: one instruction per op (plus extras), multi-byte LEBs everywhere.
@@ -264,8 +272,9 @@ fn sections(b: &[u8]) -> Vec<(u8, usize, usize)> {
     out
 }
 
+/// Decodes `bytes` after sealing them, so the error comes from the part under test.
 fn decode_err(bytes: &[u8]) -> DecodeError {
-    match Module::decode(bytes) {
+    match Module::decode(&sealed(bytes)) {
         Err(LoadError::Decode { error, .. }) => error,
         other => panic!("expected decode error, got {other:?}"),
     }
@@ -312,7 +321,7 @@ fn every_instruction_round_trips() {
     };
     let bytes = module.encode();
     assert_eq!(bytes, encode(&data));
-    assert!(bytes.starts_with(HEADER));
+    assert!(bytes.starts_with(&HEADER[..6]));
 
     let decoded = Module::decode(&bytes).expect("decode+verify");
     assert_eq!(decoded.data(), &data);
@@ -517,22 +526,32 @@ fn memory_none_vs_zero_distinguished() {
 
 #[test]
 fn header_and_empty_module() {
-    assert_eq!(HEADER, &[0x45, 0x46, 0x56, 0x4D, 0x01, 0x00]);
+    assert_eq!(HEADER, &[0x45, 0x46, 0x56, 0x4D, 0x02, 0x00, 0, 0, 0, 0]);
     assert_eq!(encode(&ModuleData::default()), HEADER);
     let m = Module::decode(HEADER).unwrap();
     assert_eq!(m.data(), &ModuleData::default());
     assert_eq!(m.encode(), HEADER);
-    assert_eq!(big_bytes()[..6], *HEADER);
+    assert_eq!(big_bytes()[..6], HEADER[..6]);
 
     // Bad header variants.
     assert!(matches!(decode_err(b""), DecodeError::UnexpectedEnd | DecodeError::BadMagic));
     assert!(matches!(decode_err(b"EFV"), DecodeError::UnexpectedEnd | DecodeError::BadMagic));
-    assert_eq!(decode_err(b"EFVN\x01\x00"), DecodeError::BadMagic);
-    assert_eq!(decode_err(b"\x00asm\x01\x00"), DecodeError::BadMagic);
-    assert_eq!(decode_err(b"EFVM\x02\x00"), DecodeError::BadVersion(2));
-    assert_eq!(decode_err(b"EFVM\x00\x01"), DecodeError::BadVersion(256));
+    assert_eq!(decode_err(b"EFVN\x02\x00"), DecodeError::BadMagic);
+    assert_eq!(decode_err(b"\x00asm\x02\x00"), DecodeError::BadMagic);
+    assert_eq!(decode_err(b"EFVM\x01\x00\0\0\0\0"), DecodeError::BadVersion(1));
+    assert_eq!(decode_err(b"EFVM\x03\x00"), DecodeError::BadVersion(3));
+    assert_eq!(decode_err(b"EFVM\x00\x02"), DecodeError::BadVersion(512));
     assert_eq!(decode_err(b"EFVM\x00\x00"), DecodeError::BadVersion(0));
-    assert!(matches!(decode_err(b"EFVM\x01"), DecodeError::UnexpectedEnd));
+    assert!(matches!(decode_err(b"EFVM\x02"), DecodeError::UnexpectedEnd));
+    assert!(matches!(decode_err(b"EFVM\x02\x00\0\0\0"), DecodeError::UnexpectedEnd));
+    // An unsealed module (stale checksum) is rejected before its sections are read.
+    let mut b = big_bytes();
+    let last = b.len() - 1;
+    b[last] ^= 0x40;
+    assert!(matches!(
+        Module::decode(&b),
+        Err(LoadError::Decode { offset: 6, error: DecodeError::BadChecksum { .. } })
+    ));
 }
 
 #[test]
@@ -554,18 +573,18 @@ fn custom_sections_are_skipped() {
             let mut b = bytes[..at].to_vec();
             b.extend_from_slice(c);
             b.extend_from_slice(&bytes[at..]);
-            let m = Module::decode(&b).unwrap_or_else(|e| panic!("custom {c:?} at {at}: {e}"));
+            let m = Module::decode(&sealed(&b)).unwrap_or_else(|e| panic!("custom {c:?} at {at}: {e}"));
             assert_eq!(m.data(), &data);
         }
     }
     // Custom section only.
     let mut b = HEADER.to_vec();
     b.extend_from_slice(&[200, 2, 9, 9]);
-    assert_eq!(Module::decode(&b).unwrap().data(), &ModuleData::default());
+    assert_eq!(Module::decode(&sealed(&b)).unwrap().data(), &ModuleData::default());
     // Custom section with a size that overruns the input.
     let mut b = HEADER.to_vec();
     b.extend_from_slice(&[200, 9, 1, 2]);
-    assert!(matches!(Module::decode(&b), Err(LoadError::Decode { .. })));
+    assert!(matches!(Module::decode(&sealed(&b)), Err(LoadError::Decode { .. })));
 }
 
 #[test]
@@ -631,10 +650,10 @@ fn trailing_garbage_rejected() {
     for t in tails {
         let mut b = bytes.clone();
         b.extend_from_slice(t);
-        assert!(matches!(Module::decode(&b), Err(LoadError::Decode { .. })), "tail {t:?}");
+        assert!(matches!(Module::decode(&sealed(&b)), Err(LoadError::Decode { .. })), "tail {t:?}");
         let mut b = HEADER.to_vec();
         b.extend_from_slice(t);
-        assert!(matches!(Module::decode(&b), Err(LoadError::Decode { .. })), "bare tail {t:?}");
+        assert!(matches!(Module::decode(&sealed(&b)), Err(LoadError::Decode { .. })), "bare tail {t:?}");
     }
 }
 
@@ -649,11 +668,11 @@ fn overlong_leb_in_section_size_rejected() {
     // 5th byte with bits that do not fit a u32.
     let mut b = HEADER.to_vec();
     b.extend_from_slice(&[1, 0xFF, 0xFF, 0xFF, 0xFF, 0x1F]);
-    assert!(matches!(Module::decode(&b), Err(LoadError::Decode { .. })));
+    assert!(matches!(Module::decode(&sealed(&b)), Err(LoadError::Decode { .. })));
     // Zero-padded within the max length is accepted: types section of size 1 as 5-byte LEB.
     let mut b = HEADER.to_vec();
     b.extend_from_slice(&[1, 0x81, 0x80, 0x80, 0x80, 0x00, 0x00]);
-    let m = Module::decode(&b).unwrap();
+    let m = Module::decode(&sealed(&b)).unwrap();
     assert!(m.data().types.is_empty());
 }
 
@@ -681,7 +700,7 @@ fn huge_counts_rejected_without_allocating() {
     b.push(9);
     b.push(huge.len() as u8);
     b.extend_from_slice(&huge);
-    assert!(matches!(Module::decode(&b), Err(LoadError::Decode { .. })));
+    assert!(matches!(Module::decode(&sealed(&b)), Err(LoadError::Decode { .. })));
     // instruction count in a body
     let mut b = HEADER.to_vec();
     b.extend_from_slice(&[1, 3, 1, 0, 0]);
@@ -698,7 +717,7 @@ fn huge_counts_rejected_without_allocating() {
     b.push(7);
     b.push(p.len() as u8);
     b.extend_from_slice(&p);
-    assert!(matches!(Module::decode(&b), Err(LoadError::Decode { .. })));
+    assert!(matches!(Module::decode(&sealed(&b)), Err(LoadError::Decode { .. })));
     let mut b = HEADER.to_vec();
     let mut p = vec![1u8, 1]; // one type; one param count...
     p[1] = 0xFF;
@@ -849,7 +868,8 @@ fn every_truncation_is_rejected() {
             s
         };
         for len in 0..bytes.len() {
-            let prefix = &bytes[..len];
+            // Sealed, so the cut is what fails, not the checksum.
+            let prefix = &sealed(&bytes[..len]);
             let r = catch_unwind(AssertUnwindSafe(|| Module::decode(prefix)));
             let r = match r {
                 Ok(r) => r,
@@ -872,7 +892,7 @@ fn every_truncation_is_rejected() {
     // between `functions` and `code` (sections 3..=8).
     let bytes = big_bytes();
     for (id, _, end) in sections(&bytes) {
-        let r = decode(&bytes[..end]);
+        let r = decode(&sealed(&bytes[..end]));
         if (3..=8).contains(&id) {
             assert!(r.is_err(), "functions without code must be rejected (through section {id})");
         } else {
@@ -954,6 +974,10 @@ fn random_mutations_never_panic() {
         let rounds = 1 + rng.below(3);
         for _ in 0..rounds {
             mutate(&mut rng, &mut b);
+        }
+        // Re-seal most mutants so they reach the section decoders and the verifier.
+        if rng.below(4) != 0 {
+            efevm::binary::seal(&mut b);
         }
         let (decoded, ran_it) = guarded(&b);
         ok += decoded as usize;

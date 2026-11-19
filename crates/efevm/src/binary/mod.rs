@@ -13,6 +13,8 @@ pub enum DecodeError {
     UnexpectedEnd,
     BadMagic,
     BadVersion(u16),
+    /// The header checksum does not match the CRC-32 of the bytes after the header.
+    BadChecksum { stored: u32, computed: u32 },
     LebTooLong,
     SectionOutOfOrder(u8),
     UnknownSection(u8),
@@ -38,6 +40,9 @@ impl fmt::Display for DecodeError {
             DecodeError::UnexpectedEnd => f.write_str("unexpected end of input"),
             DecodeError::BadMagic => f.write_str("bad magic bytes"),
             DecodeError::BadVersion(v) => write!(f, "unsupported version {v}"),
+            DecodeError::BadChecksum { stored, computed } => {
+                write!(f, "checksum mismatch (stored {stored:#010x}, computed {computed:#010x}): the module is corrupt")
+            }
             DecodeError::LebTooLong => f.write_str("LEB128 value too long"),
             DecodeError::SectionOutOfOrder(id) => write!(f, "section {id} out of order"),
             DecodeError::UnknownSection(id) => write!(f, "unknown section {id}"),
@@ -59,12 +64,34 @@ impl fmt::Display for DecodeError {
 
 impl std::error::Error for DecodeError {}
 
+/// The four magic bytes every `.efvm` module starts with.
+pub const MAGIC: [u8; 4] = *b"EFVM";
+/// The binary format version this crate reads and writes (SPEC.md 9).
+pub const VERSION: u16 = 2;
+/// Header length: magic, version and checksum. Sections start at this offset.
+pub const HEADER_LEN: usize = 10;
+
+/// CRC-32 (IEEE) of the bytes after the header, the value stored at offset 6.
+pub fn checksum(bytes: &[u8]) -> u32 {
+    crc32fast::hash(bytes.get(HEADER_LEN..).unwrap_or(&[]))
+}
+
+/// Recomputes and stores the header checksum of `bytes` in place. Does nothing when `bytes`
+/// is shorter than the header. For tools and tests that build or patch `.efvm` bytes by hand;
+/// [`encode`] already seals its output.
+pub fn seal(bytes: &mut [u8]) {
+    let sum = checksum(bytes);
+    if let Some(slot) = bytes.get_mut(6..HEADER_LEN) {
+        slot.copy_from_slice(&sum.to_le_bytes());
+    }
+}
+
 /// Encodes a module to `.efvm` bytes.
 pub fn encode(m: &ModuleData) -> Vec<u8> {
     encode::encode(m)
 }
 
-/// Decodes bytes without verifying.
+/// Decodes bytes without verifying the module (the header checksum is checked).
 pub fn decode(bytes: &[u8]) -> Result<ModuleData, LoadError> {
     decode::decode(bytes)
 }

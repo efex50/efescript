@@ -4,7 +4,15 @@
 use efevm::binary::{decode, encode};
 use efevm::*;
 
-const HEADER: &[u8] = b"EFVM\x01\x00";
+/// Header of an empty module: magic, version 2, checksum (CRC-32 of nothing is 0).
+const HEADER: &[u8] = b"EFVM\x02\x00\0\0\0\0";
+
+/// A copy of `b` with its header checksum recomputed, for hand-built or spliced bytes.
+fn sealed(b: &[u8]) -> Vec<u8> {
+    let mut b = b.to_vec();
+    efevm::binary::seal(&mut b);
+    b
+}
 
 fn ok(_: &mut Caller<'_, ()>, _: &Args<'_>, _: &mut Results<'_>) -> Result<HostOk, Trap> {
     Ok(HostOk::Continue)
@@ -45,8 +53,9 @@ fn module_with(events: &[Ref<'_>]) -> Module {
     b.finish().expect("module")
 }
 
+/// Decodes `bytes` after sealing them, so the error comes from the part under test.
 fn decode_err(bytes: &[u8]) -> DecodeError {
-    match decode(bytes) {
+    match decode(&sealed(bytes)) {
         Err(LoadError::Decode { error, .. }) => error,
         other => panic!("expected a decode error, got {other:?}"),
     }
@@ -83,7 +92,7 @@ fn section14(payload: &[u8]) -> Vec<u8> {
     b.push(14);
     b.extend(uleb(payload.len() as u64));
     b.extend_from_slice(payload);
-    b
+    sealed(&b)
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -388,7 +397,7 @@ fn section_14_decode_errors() {
     assert_eq!(decode_err(&b), DecodeError::SectionOutOfOrder(13));
     let mut b = iface.clone();
     b.extend_from_slice(&ev[HEADER.len()..]);
-    assert!(decode(&b).is_ok());
+    assert!(decode(&sealed(&b)).is_ok());
     let mut b = ev.clone();
     b.extend_from_slice(&ev[HEADER.len()..]);
     assert_eq!(decode_err(&b), DecodeError::SectionOutOfOrder(14));
@@ -416,6 +425,9 @@ fn mutated_section_14_never_panics() {
                 2 => b.truncate(i.max(1)),
                 _ => b.insert(i, next() as u8),
             }
+        }
+        if next() % 4 != 0 {
+            efevm::binary::seal(&mut b);
         }
         if let Ok(m) = Module::decode(&b) {
             let _ = imports.check_module(&m);

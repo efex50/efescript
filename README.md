@@ -1,3 +1,8 @@
+> **Mirror.** This repository is generated from
+> [efeengine](https://github.com/efex50/efeengine) (`crates/efescript`, `efevm`, `efa`,
+> `efemod`, `calc`) by `scripts/sync_efescript.py`. Send changes there; edits here are
+> overwritten by the next sync.
+
 # efescript
 
 The scripting layer of efeengine. Scripts are written in `.efa`, a text assembly language. The

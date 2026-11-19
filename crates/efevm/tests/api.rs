@@ -194,22 +194,27 @@ fn api_section_round_trips() {
     // Some with no namespaces is kept distinct from None.
     let empty = ModuleData { api: Some(ApiRef::default()), ..ModuleData::default() };
     assert_eq!(binary::decode(&binary::encode(&empty)).unwrap(), empty);
-    assert_eq!(binary::encode(&empty), b"EFVM\x01\x00\x0c\x09\0\0\0\0\0\0\0\0\0");
-    assert_eq!(binary::encode(&ModuleData::default()), b"EFVM\x01\x00");
+    let mut want = b"EFVM\x02\x00\0\0\0\0\x0c\x09\0\0\0\0\0\0\0\0\0".to_vec();
+    binary::seal(&mut want);
+    assert_eq!(binary::encode(&empty), want);
+    assert_eq!(binary::encode(&ModuleData::default()), b"EFVM\x02\x00\0\0\0\0");
     // Every truncation of the api section fails to decode instead of panicking.
     let full = binary::encode(&m.data().clone());
     let start = full.iter().rposition(|&b| b == 12).unwrap();
     for n in start..full.len() {
-        assert!(binary::decode(&full[..n]).is_err(), "prefix {n}");
+        let mut prefix = full[..n].to_vec();
+        binary::seal(&mut prefix); // so the cut is what fails, not the checksum
+        assert!(binary::decode(&prefix).is_err(), "prefix {n}");
     }
 }
 
 #[test]
 fn api_section_rejections() {
     let sec = |payload: &[u8]| {
-        let mut b = b"EFVM\x01\x00\x0c".to_vec();
+        let mut b = b"EFVM\x02\x00\0\0\0\0\x0c".to_vec();
         b.push(payload.len() as u8);
         b.extend_from_slice(payload);
+        binary::seal(&mut b);
         b
     };
     let dec = |b: &[u8]| match binary::decode(b) {
@@ -222,14 +227,16 @@ fn api_section_rejections() {
     assert_eq!(dec(&sec(&[0, 0, 0, 0, 0, 0, 0, 0, 0, 9])), DecodeError::SectionSizeMismatch(12));
     assert_eq!(dec(&sec(&[0, 0, 0, 0, 0, 0, 0, 0, 1, 1, b'a', 0x80, 0x80, 0x80, 0x80, 0x10])), DecodeError::LebTooLong);
     for id in 15..=127u8 {
-        let mut b = b"EFVM\x01\x00".to_vec();
+        let mut b = b"EFVM\x02\x00\0\0\0\0".to_vec();
         b.extend_from_slice(&[id, 0]);
+        binary::seal(&mut b);
         assert_eq!(dec(&b), DecodeError::UnknownSection(id));
     }
     // Section 12 must come after 11.
     let lines = ModuleData { lines: Lines { files: vec!["a".into()], funcs: vec![] }, ..ModuleData::default() };
     let mut b = sec(&[0; 9]);
-    b.extend_from_slice(&binary::encode(&lines)[6..]);
+    b.extend_from_slice(&binary::encode(&lines)[binary::HEADER_LEN..]);
+    binary::seal(&mut b);
     assert_eq!(dec(&b), DecodeError::SectionOutOfOrder(11));
     // The verifier rejects duplicate or invalid namespace names.
     for ns in [vec![("std", 1), ("std", 2)], vec![("", 1)], vec![("a..b", 1)]] {

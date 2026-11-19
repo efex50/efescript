@@ -2,7 +2,8 @@
 //!
 //! File layout:
 //! - 4-byte magic: `b"EFVM"`
-//! - 2-byte version: `1u16` in little-endian (`[0x01, 0x00]`)
+//! - 2-byte version: `2u16` in little-endian (`[0x02, 0x00]`)
+//! - 4-byte checksum: CRC-32 (IEEE) of every byte after the header, little-endian
 //! - Non-empty sections in ascending ID order:
 //!   - 1: Types (function signatures)
 //!   - 2: Imports (host function declarations)
@@ -34,9 +35,11 @@ use crate::types::ValType;
 pub(crate) fn encode(m: &ModuleData) -> Vec<u8> {
     let mut out = Vec::new();
 
-    // Header: b"EFVM" followed by version 1 as u16 little-endian.
-    out.extend_from_slice(b"EFVM");
-    out.extend_from_slice(&1u16.to_le_bytes());
+    // Header: b"EFVM", the version as u16 little-endian, then a checksum placeholder that
+    // `seal` fills in once every section is written.
+    out.extend_from_slice(&super::MAGIC);
+    out.extend_from_slice(&super::VERSION.to_le_bytes());
+    out.extend_from_slice(&[0; 4]);
 
     // Section 1: Types
     if !m.types.is_empty() {
@@ -336,6 +339,7 @@ pub(crate) fn encode(m: &ModuleData) -> Vec<u8> {
         emit_section(&mut out, 14, &payload);
     }
 
+    super::seal(&mut out);
     out
 }
 
@@ -467,7 +471,7 @@ mod tests {
     fn default_module_header_only() {
         let m = ModuleData::default();
         let bytes = encode(&m);
-        assert_eq!(bytes, b"EFVM\x01\x00");
+        assert_eq!(bytes, b"EFVM\x02\x00\0\0\0\0");
     }
 
     #[test]
@@ -480,9 +484,10 @@ mod tests {
             ..Default::default()
         };
         let bytes = encode(&m);
-        assert_eq!(&bytes[..6], b"EFVM\x01\x00");
+        assert_eq!(&bytes[..6], b"EFVM\x02\x00");
+        assert_eq!(&bytes[6..10], &crate::binary::checksum(&bytes).to_le_bytes());
         // Section 1: id=1, size=6, count=1, params_count=2, i32=0, i64=1, results_count=1, f64=3
-        assert_eq!(&bytes[6..], &[1, 6, 1, 2, 0, 1, 1, 3]);
+        assert_eq!(&bytes[10..], &[1, 6, 1, 2, 0, 1, 1, 3]);
     }
 
     #[test]
@@ -495,8 +500,9 @@ mod tests {
             ..Default::default()
         };
         let bytes = encode(&m);
-        assert_eq!(&bytes[..6], b"EFVM\x01\x00");
-        assert_eq!(&bytes[6..], &[5, 3, 1, 1, 2]);
+        assert_eq!(&bytes[..6], b"EFVM\x02\x00");
+        assert_eq!(&bytes[6..10], &crate::binary::checksum(&bytes).to_le_bytes());
+        assert_eq!(&bytes[10..], &[5, 3, 1, 1, 2]);
     }
 
     #[test]
@@ -515,11 +521,12 @@ mod tests {
             ..Default::default()
         };
         let bytes = encode(&m);
-        // Header (6 bytes): b"EFVM\x01\x00"
-        assert_eq!(&bytes[..6], b"EFVM\x01\x00");
+        // Header (10 bytes): b"EFVM\x02\x00" + checksum
+        assert_eq!(&bytes[..6], b"EFVM\x02\x00");
+        assert_eq!(&bytes[6..10], &crate::binary::checksum(&bytes).to_le_bytes());
         // Functions section (Section 3):
         // id: 3, size: 3, count: 1, type_idx: 0, nregs: 1
-        assert_eq!(&bytes[6..11], &[3, 3, 1, 0, 1]);
+        assert_eq!(&bytes[10..15], &[3, 3, 1, 0, 1]);
         // Code section (Section 9):
         // id: 9, size: 7, func_count: 1, inst_count: 2,
         // Op::ConstI32, r0=0, imm=-1 (sleb 0x7F),
@@ -535,7 +542,7 @@ mod tests {
             Op::Ret.code() as u8,
             0,
         ];
-        assert_eq!(&bytes[11..], &expected_code_section);
+        assert_eq!(&bytes[15..], &expected_code_section);
     }
 
     #[test]
@@ -545,13 +552,14 @@ mod tests {
             ..Default::default()
         };
         let bytes = encode(&m);
-        assert_eq!(&bytes[..6], b"EFVM\x01\x00");
+        assert_eq!(&bytes[..6], b"EFVM\x02\x00");
+        assert_eq!(&bytes[6..10], &crate::binary::checksum(&bytes).to_le_bytes());
         // Section 4 (table): id=4, payload size 8:
         // count: 3
         // None -> 0
         // Some(0) -> 1
         // Some(u32::MAX) -> u32::MAX + 1 = 4294967296 -> [0x80, 0x80, 0x80, 0x80, 0x10]
-        assert_eq!(&bytes[6..], &[4, 8, 3, 0, 1, 0x80, 0x80, 0x80, 0x80, 0x10]);
+        assert_eq!(&bytes[10..], &[4, 8, 3, 0, 1, 0x80, 0x80, 0x80, 0x80, 0x10]);
     }
 
     #[test]
@@ -582,8 +590,9 @@ mod tests {
             ..Default::default()
         };
         let bytes = encode(&m);
-        assert_eq!(&bytes[..6], b"EFVM\x01\x00");
-        assert_eq!(bytes[6], 6); // section 6
+        assert_eq!(&bytes[..6], b"EFVM\x02\x00");
+        assert_eq!(&bytes[6..10], &crate::binary::checksum(&bytes).to_le_bytes());
+        assert_eq!(bytes[10], 6); // section 6
     }
 
     #[test]
@@ -602,8 +611,9 @@ mod tests {
             ..Default::default()
         };
         let bytes = encode(&m);
-        assert_eq!(&bytes[..6], b"EFVM\x01\x00");
-        assert_eq!(bytes[6], 7); // section 7
+        assert_eq!(&bytes[..6], b"EFVM\x02\x00");
+        assert_eq!(&bytes[6..10], &crate::binary::checksum(&bytes).to_le_bytes());
+        assert_eq!(bytes[10], 7); // section 7
     }
 
     #[test]
@@ -616,8 +626,9 @@ mod tests {
             ..Default::default()
         };
         let bytes = encode(&m);
-        assert_eq!(&bytes[..6], b"EFVM\x01\x00");
-        assert_eq!(bytes[6], 8); // section 8
+        assert_eq!(&bytes[..6], b"EFVM\x02\x00");
+        assert_eq!(&bytes[6..10], &crate::binary::checksum(&bytes).to_le_bytes());
+        assert_eq!(bytes[10], 8); // section 8
     }
 
     #[test]
@@ -630,8 +641,9 @@ mod tests {
             ..Default::default()
         };
         let bytes = encode(&m);
-        assert_eq!(&bytes[..6], b"EFVM\x01\x00");
-        assert_eq!(bytes[6], 10); // section 10
+        assert_eq!(&bytes[..6], b"EFVM\x02\x00");
+        assert_eq!(&bytes[6..10], &crate::binary::checksum(&bytes).to_le_bytes());
+        assert_eq!(bytes[10], 10); // section 10
     }
 
     #[test]
@@ -652,8 +664,9 @@ mod tests {
             ..Default::default()
         };
         let bytes = encode(&m);
-        assert_eq!(&bytes[..6], b"EFVM\x01\x00");
-        assert_eq!(bytes[6], 11); // section 11
+        assert_eq!(&bytes[..6], b"EFVM\x02\x00");
+        assert_eq!(&bytes[6..10], &crate::binary::checksum(&bytes).to_le_bytes());
+        assert_eq!(bytes[10], 11); // section 11
     }
 
     #[test]
@@ -676,7 +689,8 @@ mod tests {
             ..Default::default()
         };
         let bytes = encode(&m);
-        assert_eq!(&bytes[..6], b"EFVM\x01\x00");
+        assert_eq!(&bytes[..6], b"EFVM\x02\x00");
+        assert_eq!(&bytes[6..10], &crate::binary::checksum(&bytes).to_le_bytes());
     }
 
     #[test]
@@ -712,6 +726,7 @@ mod tests {
             ..Default::default()
         };
         let bytes = encode(&m);
-        assert_eq!(&bytes[..6], b"EFVM\x01\x00");
+        assert_eq!(&bytes[..6], b"EFVM\x02\x00");
+        assert_eq!(&bytes[6..10], &crate::binary::checksum(&bytes).to_le_bytes());
     }
 }
