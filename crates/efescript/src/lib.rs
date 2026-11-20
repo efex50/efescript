@@ -10,3 +10,6 @@ pub mod run_v2;
 pub mod bundle;
 pub mod lsp;
 pub mod pack;
+pub mod bindmodel;
+pub mod rustgen;
+pub mod cgen;

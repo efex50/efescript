@@ -1,0 +1,16 @@
+[package]
+name = "efe-guest"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "Guest runtime for efescript mods written in Rust and built for wasm32-unknown-unknown (roadmap E7.4a)"
+
+[lib]
+path = "src/lib.rs"
+
+[features]
+default = ["allocator", "panic-handler"]
+# A `#[global_allocator]` over `memory.grow` (wasm32 only). Turn it off to bring your own.
+allocator = []
+# A `#[panic_handler]` that traps (wasm32 only). Turn it off if the mod crate uses `std`.
+panic-handler = []

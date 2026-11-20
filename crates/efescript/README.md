@@ -52,6 +52,13 @@ Exit codes:
   signature, an unresolved import, an unreadable or invalid `--api` file, a `.efe`/`.efec` file).
 - 3: a trap (the trap and its backtrace go to stderr), or the `--budget` ran out.
 
+## Mods in Rust and C (E7.4a)
+
+`efescript api-export --rust GAME.efapi [DEP.efmod]... -o api.rs` and `--c ... -o efe_api.h`
+generate bindings for a guest mod compiled to wasm (Rust: crate `efe-guest`; C/C++:
+`crates/efe-guest/include/efe_guest.h`). The wasm ABI, the custom sections and the plan for the
+translator are in `docs/e7.4-wasm-design.md`; the translator itself (E7.4b) is not built yet.
+
 ## API index (`--api`)
 
 An API index (`.efapi`) lists everything a script can call or see: namespaces, host functions

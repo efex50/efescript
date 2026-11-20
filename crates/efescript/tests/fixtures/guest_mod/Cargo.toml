@@ -1,0 +1,21 @@
+# A guest mod written in Rust (roadmap E7.4a). Not a member of the efeengine workspace: it is
+# built for wasm32-unknown-unknown by tests/guest_wasm.rs, with its own lock file and target dir.
+[package]
+name = "guest_mod"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[lib]
+path = "src/lib.rs"
+crate-type = ["cdylib"]
+
+[dependencies]
+efe-guest = { path = "../../../../efe-guest" }
+
+[profile.release]
+opt-level = "s"
+panic = "abort"
+lto = true
+
+[workspace]

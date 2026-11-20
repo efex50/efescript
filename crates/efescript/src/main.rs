@@ -12,6 +12,8 @@ const USAGE: &str = r#"usage: efescript run   <file.efa|file.efvm> [--budget N] 
        efescript pack  <DIR> [--api F]... [-o out.efmod]
        efescript inspect <file.efmod|file.efvm>
        efescript api-export <file.efmod|file.efvm> [--id ID] [-o FILE.efapi]
+       efescript api-export --rust <file.efapi|file.efmod>... [-o api.rs]
+       efescript api-export --c    <file.efapi|file.efmod>... [-o efe_api.h]
        efescript lsp   [--api FILE.efapi]...  (language server on stdin/stdout)
        efescript debug <file.efa|file.efvm> [--api FILE.efapi]... [--fs-root DIR]
                                              (debugger; commands on stdin, `help` lists them)
@@ -53,6 +55,12 @@ const USAGE: &str = r#"usage: efescript run   <file.efa|file.efvm> [--budget N] 
   api-export FILE writes the API index of a mod (.efmod) or of a bare module (.efvm,
   which needs --id ID, the namespace it provides under). Without FILE it writes the
   index of the std host.
+
+  api-export --rust writes Rust bindings (a module for a no_std guest crate built for
+  wasm32-unknown-unknown with `efe-guest`), api-export --c a C/C++ header (with
+  `efe_guest.h`, clang --target=wasm32), from one or more .efapi or .efmod inputs; several
+  inputs are merged like --api (the game's index plus the mods it depends on). Without -o it
+  writes to stdout. See docs/e7.4-wasm-design.md.
 
   api prints the namespaces, types and functions of an index file (exit 2 when it
   cannot be read). api-export writes the index of the std host (default: stdout).
@@ -270,7 +278,28 @@ fn v2_api(args: &[String]) -> ! {
     std::process::exit(0);
 }
 
+/// `api-export --rust|--c INPUT... [-o FILE]`: Rust or C bindings for a guest mod (E7.4a).
+fn v2_api_export_bindings(args: &[String], c: bool) -> ! {
+    let rest: Vec<String> = args.iter().filter(|a| a.as_str() != "--rust" && a.as_str() != "--c").cloned().collect();
+    let a = v2_args(&rest, Allow { out: true, many: true, ..Allow::default() });
+    let inputs: Vec<String> = a.file.into_iter().chain(a.more).collect();
+    let Some(index) = read_indices(&inputs) else { v2_fail("error: api-export --rust/--c needs at least one .efapi or .efmod input") };
+    let text = if c { efescript::cgen::generate(&index).map_err(|e| e.to_string()) } else { efescript::rustgen::generate(&index).map_err(|e| e.to_string()) };
+    let text = text.unwrap_or_else(|e| v2_fail(format!("error: {e}")));
+    match a.out {
+        Some(o) => std::fs::write(&o, text).unwrap_or_else(|e| v2_fail(format!("error: {o}: {e}"))),
+        None => write_stdout(text.as_bytes()),
+    }
+    std::process::exit(0);
+}
+
 fn v2_api_export(args: &[String]) -> ! {
+    if args.iter().any(|a| a == "--rust") {
+        v2_api_export_bindings(args, false);
+    }
+    if args.iter().any(|a| a == "--c") {
+        v2_api_export_bindings(args, true);
+    }
     let a = v2_args(args, Allow { out: true, id: true, ..Allow::default() });
     let json = match &a.file {
         Some(f) => mod_api_json(f, a.id.as_deref()),

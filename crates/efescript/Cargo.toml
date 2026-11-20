@@ -29,3 +29,7 @@ serde_json = "1.0.154"
 default = []
 # real sound playback for std.play_sound (needs ALSA headers on Linux)
 audio = ["dep:rodio"]
+
+[dev-dependencies]
+# Inspects the .wasm built from the guest example (tests/guest_wasm.rs). Test only.
+wasmparser = "0.245"

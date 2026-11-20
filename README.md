@@ -1,6 +1,6 @@
 > **Mirror.** This repository is generated from
 > [efeengine](https://github.com/efex50/efeengine) (`crates/efescript`, `efevm`, `efevm-jit`,
-> `efa`, `efemod`, `calc`) by `scripts/sync_efescript.py`. Send changes there; edits here are
+> `efa`, `efemod`, `calc`, `efe-guest`) by `scripts/sync_efescript.py`. Send changes there; edits here are
 > overwritten by the next sync.
 
 # efescript
@@ -56,6 +56,13 @@ Exit codes:
 - 2: a load or assembly error (missing file, diagnostics, no exported `main` or a wrong `main`
   signature, an unresolved import, an unreadable or invalid `--api` file, a `.efe`/`.efec` file).
 - 3: a trap (the trap and its backtrace go to stderr), or the `--budget` ran out.
+
+## Mods in Rust and C (E7.4a)
+
+`efescript api-export --rust GAME.efapi [DEP.efmod]... -o api.rs` and `--c ... -o efe_api.h`
+generate bindings for a guest mod compiled to wasm (Rust: crate `efe-guest`; C/C++:
+`crates/efe-guest/include/efe_guest.h`). The wasm ABI, the custom sections and the plan for the
+translator are in `docs/e7.4-wasm-design.md`; the translator itself (E7.4b) is not built yet.
 
 ## API index (`--api`)
 
