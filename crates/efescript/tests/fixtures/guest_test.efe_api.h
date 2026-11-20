@@ -243,9 +243,15 @@ __attribute__((import_module("game.async@3"), import_name("tick.read")))
 int32_t game_async_tick_read(uint32_t index, efe_Wide* out); /**< payload of the index-th event; 0 ok, -1 none */
 
 #ifdef EFE_API_IMPLEMENTATION
-/* The `efe.api` custom section: the index hash, 8 bytes little-endian. */
+/* The `efe.api` custom section: the index hash, 8 bytes little-endian. clang and lld turn
+ * `section(".custom_section.X")` data into data segments, so for wasm it is written with
+ * inline assembly, which does make a real custom section. */
+#ifdef __wasm__
+__asm__(".section .custom_section.efe.api,\"\",@\n.byte 0x40, 0x28, 0x1e, 0xc9, 0x58, 0x47, 0x00, 0xf9\n.section .text,\"\",@\n");
+#else
 __attribute__((section(".custom_section.efe.api"), used))
 static const uint8_t efe_api_hash_bytes[8] = { 0x40, 0x28, 0x1e, 0xc9, 0x58, 0x47, 0x00, 0xf9 };
+#endif
 #endif
 
 #ifdef __cplusplus

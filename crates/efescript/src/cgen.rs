@@ -156,10 +156,16 @@ impl<'a> Gen<'a> {
 
         let _ = writeln!(self.out);
         let _ = writeln!(self.out, "#ifdef EFE_API_IMPLEMENTATION");
-        let _ = writeln!(self.out, "/* The `efe.api` custom section: the index hash, 8 bytes little-endian. */");
+        let _ = writeln!(self.out, "/* The `efe.api` custom section: the index hash, 8 bytes little-endian. clang and lld turn");
+        let _ = writeln!(self.out, " * `section(\".custom_section.X\")` data into data segments, so for wasm it is written with");
+        let _ = writeln!(self.out, " * inline assembly, which does make a real custom section. */");
         let bytes = hash.to_le_bytes().iter().map(|b| format!("0x{b:02x}")).collect::<Vec<_>>().join(", ");
+        let _ = writeln!(self.out, "#ifdef __wasm__");
+        let _ = writeln!(self.out, "__asm__(\".section .custom_section.efe.api,\\\"\\\",@\\n.byte {bytes}\\n.section .text,\\\"\\\",@\\n\");");
+        let _ = writeln!(self.out, "#else");
         let _ = writeln!(self.out, "__attribute__((section(\".custom_section.efe.api\"), used))");
         let _ = writeln!(self.out, "static const uint8_t efe_api_hash_bytes[8] = {{ {bytes} }};");
+        let _ = writeln!(self.out, "#endif");
         let _ = writeln!(self.out, "#endif");
         let _ = writeln!(self.out);
         let _ = writeln!(self.out, "#ifdef __cplusplus\n}}\n#endif\n");

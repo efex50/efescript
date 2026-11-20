@@ -5,7 +5,9 @@
  *   clang --target=wasm32 -nostdlib -O2 -Wl,--no-entry -Wl,--export=efe_scratch mod.c -o mod.wasm
  *
  * (`-Wl,--export=efe_scratch` only if the mod uses EFE_SCRATCH). The wasm ABI and the
- * `efe.provide` custom-section format are in crates/efescript/docs/e7.4-wasm-design.md.
+ * `efe.provide` record format are in crates/efescript/docs/e7.4-wasm-design.md. For wasm the
+ * records are not emitted (see EFE_SECTION_PROVIDE); the provides reach the translator through
+ * its fallback (mod.toml `[[provide]]`, design doc section 4.4).
  *
  * What it gives you:
  *   EFE_PROVIDE(name, "doc", RESULT, EFE_P(TYPE, "param"), ...)   then the function definition
@@ -106,7 +108,16 @@
 /* A 2-byte padded uleb128 (valid LEB128, 0..16383). */
 #define EFE_ULEB2(v) { 0x80 | ((v) & 0x7f), ((v) >> 7) }
 
+/* The records are the `efe.provide` custom section of a native build (the test that reads the
+ * ELF section back checks the byte format). For wasm they are not emitted: clang and lld put
+ * `.custom_section.*` data into data segments, not into custom sections, so a wasm mod gets its
+ * provides to the translator another way (TranslateOptions fallback / mod.toml `[[provide]]`,
+ * design doc e7.4, section 4.4). The exports `efe_provide_<name>` and `efe_scratch` stay. */
+#ifdef __wasm__
+#define EFE_SECTION_PROVIDE __attribute__((unused))
+#else
 #define EFE_SECTION_PROVIDE __attribute__((section(".custom_section.efe.provide"), used, aligned(1)))
+#endif
 #define EFE_EXPORT_AS(sym) __attribute__((export_name(sym)))
 
 /* Exports the function that follows as `efe_provide_<fname>` and records it. */

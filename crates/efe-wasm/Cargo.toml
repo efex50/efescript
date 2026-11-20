@@ -1,0 +1,22 @@
+[package]
+name = "efe-wasm"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "Translator from .wasm modules to efevm modules (roadmap E7.4b): lets mods written in Rust and C run on efevm"
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+efevm = { path = "../efevm" }
+wasmparser = "0.245"
+thiserror = "2.0.21"
+
+[dev-dependencies]
+wat = "1.245"
+wasmi = "2.0.2"
+
+# The JIT is native only (its crate body is empty on wasm32).
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+efevm-jit = { path = "../efevm-jit" }

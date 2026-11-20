@@ -12,6 +12,7 @@ members = [
     "crates/efa",
     "crates/efemod",
     "crates/efe-guest",
+    "crates/efe-wasm",
 ]
 exclude = ["crates/efa/fuzz"]
 

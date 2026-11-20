@@ -176,23 +176,49 @@ fn rust_guest_compiles_and_follows_the_abi() {
     eprintln!("rust guest: {} bytes, {} imports", wasm.len(), w.imports.len());
 }
 
+/// `Some(None)`: `wasm-ld` is on PATH. `Some(Some(path))`: the lld that rustup ships as
+/// `gcc-ld/wasm-ld` (no system wasm-ld needed). `None`: neither exists.
+fn wasm_ld() -> Option<Option<PathBuf>> {
+    if Command::new("wasm-ld").arg("--version").output().map(|o| o.status.success()).unwrap_or(false) {
+        return Some(None);
+    }
+    let rustc = std::env::var("RUSTC").unwrap_or_else(|_| "rustc".into());
+    let mut roots = Vec::new();
+    if let Ok(o) = Command::new(rustc).args(["--print", "sysroot"]).output() {
+        roots.push(PathBuf::from(String::from_utf8_lossy(&o.stdout).trim()));
+    }
+    let home = std::env::var_os("RUSTUP_HOME").map(PathBuf::from).or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".rustup")));
+    if let Some(dir) = home.map(|h| h.join("toolchains")).and_then(|d| std::fs::read_dir(d).ok()) {
+        roots.extend(dir.flatten().map(|e| e.path()));
+    }
+    roots.into_iter().map(|r| r.join("lib/rustlib/x86_64-unknown-linux-gnu/bin/gcc-ld/wasm-ld")).find(|p| p.is_file()).map(Some)
+}
+
 #[test]
 fn c_guest_compiles_with_clang_when_available() {
     let tool = |n: &str| Command::new(n).arg("--version").output().map(|o| o.status.success()).unwrap_or(false);
-    if !tool("clang") || !tool("wasm-ld") {
-        eprintln!("SKIPPED: clang and wasm-ld are not installed; the C guest was only checked natively (bindgen.rs: c_provide_records_match_the_format)");
+    if !tool("clang") {
+        eprintln!("SKIPPED: clang is not installed; the C guest was only checked natively (bindgen.rs: c_provide_records_match_the_format)");
         return;
     }
+    let Some(ld) = wasm_ld() else {
+        eprintln!("SKIPPED: no wasm-ld on PATH and none in a rustup toolchain");
+        return;
+    };
     let out = Path::new(env!("CARGO_TARGET_TMPDIR")).join("guest_c.wasm");
     let inc = Path::new(env!("CARGO_MANIFEST_DIR")).join("../efe-guest/include");
-    let o = Command::new("clang")
-        .args(["--target=wasm32", "-nostdlib", "-O2", "-Wl,--no-entry", "-Wl,--export=efe_scratch"])
-        .arg("-I").arg(&inc).arg("-I").arg(fixture("."))
+    let mut cmd = Command::new("clang");
+    cmd.args(["--target=wasm32", "-nostdlib", "-O2", "-Wl,--no-entry", "-Wl,--export=efe_scratch"]);
+    if let Some(p) = ld {
+        // `--ld-path` is ignored by clang's wasm driver; an absolute `-fuse-ld` path is not.
+        cmd.arg(format!("-fuse-ld={}", p.display()));
+    }
+    let o = cmd.arg("-I").arg(&inc).arg("-I").arg(fixture("."))
         .arg(fixture("guest_c/mod.c")).arg("-o").arg(&out)
         .output().unwrap();
     if !o.status.success() {
         let err = String::from_utf8_lossy(&o.stderr);
-        if err.contains("unknown target") || err.contains("No available targets") || err.contains("wasm-ld") {
+        if err.contains("unknown target") || err.contains("No available targets") {
             eprintln!("SKIPPED: this clang cannot target wasm32: {err}");
             return;
         }
@@ -206,5 +232,15 @@ fn c_guest_compiles_with_clang_when_available() {
     for name in ["spawn", "is_alive", "set_transform"] {
         assert!(w.imports.contains_key(&("engine.world@2".to_string(), name.to_string())), "{name}");
     }
-    check_common(&w);
+    // `efe.api` is a real custom section (inline assembly in the generated header). The records
+    // of EFE_PROVIDE are not emitted for wasm: clang + lld turn `.custom_section.*` variables
+    // into data segments, so the provides reach the translator through its fallback (mod.toml).
+    let api = w.customs.get("efe.api").expect("custom section `efe.api` (inline asm in the generated header)");
+    assert_eq!(api.len(), 1);
+    assert_eq!(api[0], fixture_index().hash().to_le_bytes());
+    assert!(!w.customs.contains_key("efe.provide"));
+    for name in ["efe_provide_add", "efe_provide_weigh", "efe_provide_checked", "efe_provide_run", "efe_provide_noop"] {
+        assert_eq!(w.exports.get(name).map(|e| e.0), Some(ExternalKind::Func), "export {name}");
+    }
+    assert_eq!(w.exports.get("efe_scratch").map(|e| e.0), Some(ExternalKind::Global));
 }
