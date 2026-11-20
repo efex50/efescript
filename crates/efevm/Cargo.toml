@@ -11,3 +11,8 @@ path = "src/lib.rs"
 [dependencies]
 # Header checksum of `.efvm` modules (SPEC.md 9). Pure Rust, wasm-clean.
 crc32fast = "1.5.5"
+
+[dev-dependencies]
+# `EFEVM_TEST_BACKEND=jit cargo test -p efevm` runs the integration tests on the JIT
+# (tests/common/mod.rs). A dev-dependency cycle: efevm-jit depends on efevm.
+efevm-jit = { path = "../efevm-jit" }

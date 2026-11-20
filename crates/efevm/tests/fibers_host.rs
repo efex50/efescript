@@ -18,7 +18,7 @@ fn one(np: usize, nr: usize, nregs: u16, body: impl FnOnce(&mut FunctionBuilder)
 }
 
 fn plain(m: &Module) -> Instance<()> {
-    Instance::new(m, &Imports::<()>::new(), Limits::default()).unwrap()
+    common::new_instance(m, &Imports::<()>::new(), Limits::default()).unwrap()
 }
 
 // ---------------------------------------------------------------- budget
@@ -537,7 +537,7 @@ fn spawn_errors() {
     let module = mb.finish().unwrap();
     let mut imports = HostRegistry::<()>::new();
     reg_host(&mut imports, "env", "h", ty(0, 0), |_c, _a, _r| Ok(HostOk::Continue));
-    let mut inst = Instance::new(&module, &imports.imports(), Limits::default()).unwrap();
+    let mut inst = common::new_instance(&module, &imports.imports(), Limits::default()).unwrap();
     assert_eq!(inst.spawn("nope", &[]).unwrap_err(), SpawnError::NoSuchExport);
     assert_eq!(inst.spawn("g", &[]).unwrap_err(), SpawnError::NotAFunction);
     assert_eq!(inst.spawn("imp", &[]).unwrap_err(), SpawnError::ImportEntry);
@@ -568,7 +568,7 @@ struct St {
 }
 
 fn run_st(m: &Module, imports: &Imports<St>, st: &mut St, args: &[u64]) -> (Exit, Vec<u64>) {
-    let mut inst = Instance::new(m, imports, Limits::default()).unwrap();
+    let mut inst = common::new_instance(m, imports, Limits::default()).unwrap();
     let f = inst.spawn("main", args).unwrap();
     let e = inst.resume(f, st, 100_000);
     (e, inst.results(f).map(|r| r.to_vec()).unwrap_or_default())
@@ -758,7 +758,7 @@ fn host_out_of_range_access_gives_out_of_bounds() {
     }
     assert!(st.errs.iter().all(|e| *e == Trap::OutOfBounds));
     // propagating the error with `?` traps the fiber with OutOfBounds
-    let mut inst = Instance::new(&m, &imports.imports(), Limits::default()).unwrap();
+    let mut inst = common::new_instance(&m, &imports.imports(), Limits::default()).unwrap();
     let f = inst.spawn("poke", &[65535, 2]).unwrap();
     assert_eq!(inst.resume(f, &mut st, 100), Exit::Trap(Trap::OutOfBounds));
     // and in-range writes land in memory
@@ -785,7 +785,7 @@ fn host_failed_write_does_not_modify_memory() {
         r[0] = 1;
         Ok(HostOk::Continue)
     });
-    let mut inst = Instance::new(&m, &imports.imports(), Limits::default()).unwrap();
+    let mut inst = common::new_instance(&m, &imports.imports(), Limits::default()).unwrap();
     let f = inst.spawn("main", &[65535, 2]).unwrap();
     let mut st = St::default();
     assert_eq!(inst.resume(f, &mut st, 100), Exit::Trap(Trap::OutOfBounds));
@@ -805,7 +805,7 @@ fn host_trap_boom() {
     let m = mb.finish().unwrap();
     let mut imports = HostRegistry::<St>::new();
     reg_host(&mut imports, "env", "boom", ty(0, 0), |_c, _a, _r| Err(Trap::Host("boom".to_string())));
-    let mut inst = Instance::new(&m, &imports.imports(), Limits::default()).unwrap();
+    let mut inst = common::new_instance(&m, &imports.imports(), Limits::default()).unwrap();
     let mut st = St::default();
     let f = inst.spawn("main", &[]).unwrap();
     assert_eq!(inst.resume(f, &mut st, 100), Exit::Trap(Trap::Host("boom".into())));
@@ -841,7 +841,7 @@ fn host_yield_writes_results_first_and_resume_continues() {
         r[0] = a[0] + 1;
         Ok(HostOk::Yield)
     });
-    let mut inst = Instance::new(&m, &imports.imports(), Limits::default()).unwrap();
+    let mut inst = common::new_instance(&m, &imports.imports(), Limits::default()).unwrap();
     let mut st = St::default();
     let fb = inst.spawn("main", &[]).unwrap();
     assert_eq!(inst.resume(fb, &mut st, 100), Exit::Yield);
@@ -869,7 +869,7 @@ fn host_yield_costs_one_like_any_call() {
     let m = mb.finish().unwrap();
     let mut imports = HostRegistry::<St>::new();
     reg_host(&mut imports, "env", "y", ty(0, 0), |_c, _a, _r| Ok(HostOk::Yield));
-    let mut inst = Instance::new(&m, &imports.imports(), Limits::default()).unwrap();
+    let mut inst = common::new_instance(&m, &imports.imports(), Limits::default()).unwrap();
     let mut st = St::default();
     let f = inst.spawn("main", &[]).unwrap();
     assert_eq!(inst.resume_units(f, &mut st, 100), (Exit::Yield, 1));
@@ -923,7 +923,7 @@ fn host_reads_and_sets_globals() {
         Ok(HostOk::Continue)
     });
     let mut st = St::default();
-    let mut inst = Instance::new(&m, &imports.imports(), Limits::default()).unwrap();
+    let mut inst = common::new_instance(&m, &imports.imports(), Limits::default()).unwrap();
     let f = inst.spawn("main", &[]).unwrap();
     assert_eq!(inst.resume(f, &mut st, 1000), Exit::Done);
     assert_eq!(inst.results(f), Some(&[123, 9, 0, 0, 9, u64::MAX, 1, 0][..]));
@@ -949,7 +949,7 @@ fn host_set_immutable_or_missing_global_propagated_traps_fiber() {
         c.set_global(a[0] as u32, a[1])?;
         Ok(HostOk::Continue)
     });
-    let mut inst = Instance::new(&m, &imports.imports(), Limits::default()).unwrap();
+    let mut inst = common::new_instance(&m, &imports.imports(), Limits::default()).unwrap();
     let mut st = St::default();
     for idx in [0u64, 1, 1000] {
         let f = inst.spawn("main", &[idx, 5]).unwrap();
@@ -975,7 +975,7 @@ fn host_state_persists_across_fibers_and_resumes() {
         c.host().count += 1;
         Ok(HostOk::Continue)
     });
-    let mut inst = Instance::new(&m, &imports.imports(), Limits::default()).unwrap();
+    let mut inst = common::new_instance(&m, &imports.imports(), Limits::default()).unwrap();
     let mut st = St::default();
     let a = inst.spawn("main", &[]).unwrap();
     let b = inst.spawn("main", &[]).unwrap();
@@ -1001,7 +1001,7 @@ fn import_module() -> Module {
 }
 
 fn link_err(m: &Module, imports: &Imports<()>, limits: Limits) -> LoadError {
-    match Instance::new(m, imports, limits) {
+    match common::new_instance(m, imports, limits) {
         Ok(_) => panic!("expected link failure"),
         Err(e) => e,
     }
@@ -1063,7 +1063,7 @@ fn link_import_type_mismatch() {
         Ok(HostOk::Continue)
     });
     // the later registration replaces the earlier one
-    let mut inst = Instance::new(&m, &imp.imports(), Limits::default()).unwrap();
+    let mut inst = common::new_instance(&m, &imp.imports(), Limits::default()).unwrap();
     let f = inst.spawn("main", &[21]).unwrap();
     assert_eq!(inst.resume(f, &mut (), 100), Exit::Done);
     assert_eq!(inst.results(f), Some(&[42u64][..]));
@@ -1078,7 +1078,7 @@ fn link_extra_host_functions_are_ignored() {
         Ok(HostOk::Continue)
     });
     reg_host(&mut imp, "env", "unused", ty(5, 5), |_c, _a, _r| Ok(HostOk::Continue));
-    let mut inst = Instance::new(&m, &imp.imports(), Limits::default()).unwrap();
+    let mut inst = common::new_instance(&m, &imp.imports(), Limits::default()).unwrap();
     let f = inst.spawn("main", &[1]).unwrap();
     assert_eq!(inst.resume(f, &mut (), 100), Exit::Done);
     assert_eq!(inst.results(f), Some(&[2u64][..]));
@@ -1100,7 +1100,7 @@ fn link_memory_too_large() {
     );
     // exactly at the cap is fine
     let lim = Limits { max_memory_pages: 10, ..Limits::default() };
-    let inst = Instance::new(&m, &Imports::<()>::new(), lim).unwrap();
+    let inst = common::new_instance(&m, &Imports::<()>::new(), lim).unwrap();
     assert_eq!(inst.memory().size_pages(), 10);
     // with a declared max above the cap and min within the cap: ok
     let mut mb = ModuleBuilder::new();
@@ -1111,7 +1111,7 @@ fn link_memory_too_large() {
     mb.export_func("main", id);
     let m2 = mb.finish().unwrap();
     let lim = Limits { max_memory_pages: 5, ..Limits::default() };
-    assert!(Instance::new(&m2, &Imports::<()>::new(), lim).is_ok());
+    assert!(common::new_instance(&m2, &Imports::<()>::new(), lim).is_ok());
 }
 
 #[test]

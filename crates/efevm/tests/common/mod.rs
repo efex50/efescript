@@ -44,3 +44,21 @@ pub fn reg_host<H: 'static>(
 ) {
     try_host(reg, namespace, name, ty, f).expect("register test host function");
 }
+
+/// `Instance::new`, and with `EFEVM_TEST_BACKEND=jit` in the environment the Cranelift JIT
+/// installed on the new instance. Every test that goes through here then checks the JIT against
+/// the same expectations as the interpreter: `EFEVM_TEST_BACKEND=jit cargo test -p efevm`.
+/// (Tests of the backend seam itself, `backend.rs`, use `Instance::new` directly.)
+pub fn new_instance<H: 'static>(m: &Module, imports: &Imports<H>, limits: Limits) -> Result<Instance<H>, LoadError> {
+    let mut inst = Instance::new(m, imports, limits)?;
+    if std::env::var("EFEVM_TEST_BACKEND").is_ok_and(|v| v.eq_ignore_ascii_case("jit")) {
+        let opts = efevm_jit::JitOptions { verify: true, ..Default::default() };
+        match efevm_jit::enable(&mut inst, &opts) {
+            Ok(()) => {}
+            // Documented fallback: such a module stays on the interpreter.
+            Err(efevm_jit::JitError::TooManyRegisters { .. }) => {}
+            Err(e) => panic!("the JIT does not compile this test module: {e}"),
+        }
+    }
+    Ok(inst)
+}

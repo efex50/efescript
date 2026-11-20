@@ -1,6 +1,7 @@
 //! Instruction tests for constants, moves, select, nop, linear memory loads/stores,
 //! memory.size/grow/copy/fill, globals and data segments (SPEC.md sections 3, 5, 8).
 
+mod common;
 use efevm::{
     Exit, FuncType, FunctionBuilder, Imports, Instance, Limits, Module, ModuleBuilder, Op,
     Trap, ValType,
@@ -51,7 +52,7 @@ fn module(
 }
 
 fn instantiate(m: &Module, limits: Limits) -> Instance<()> {
-    Instance::new(m, &Imports::<()>::new(), limits).expect("instantiate")
+    common::new_instance(m, &Imports::<()>::new(), limits).expect("instantiate")
 }
 
 /// Spawns "main", runs it to completion or trap, returns the exit and the results.
@@ -1003,7 +1004,7 @@ fn data_segment_that_does_not_fit_is_rejected() {
     match mb.finish() {
         Err(_) => {}
         Ok(m) => assert!(
-            Instance::new(&m, &Imports::<()>::new(), Limits::default()).is_err(),
+            common::new_instance(&m, &Imports::<()>::new(), Limits::default()).is_err(),
             "segment past the end of memory must be rejected"
         ),
     }

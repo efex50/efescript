@@ -826,7 +826,7 @@ fn instantiate_and_run(module: &Module) -> bool {
         let _ = reg.register_event(d);
     }
     let limits = Limits { max_memory_pages: 16, max_call_depth: 64, max_registers: 1 << 16, max_fibers: 8 };
-    let Ok(mut inst) = Instance::new(module, &reg.imports(), limits) else {
+    let Ok(mut inst) = common::new_instance(module, &reg.imports(), limits) else {
         return false;
     };
     for e in &data.exports {

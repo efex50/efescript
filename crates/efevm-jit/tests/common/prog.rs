@@ -7,12 +7,12 @@ pub fn registry() -> HostRegistry<Hs> {
     let mut reg = HostRegistry::new();
     reg_host(&mut reg, "ping", ty64(1, 1), |c, a, r| {
         c.host().log.push(a[0]);
-        r[0] = a[0] + 1;
+        r[0] = a[0].wrapping_add(1);
         Ok(HostOk::Continue)
     });
     reg_host(&mut reg, "hy", ty64(1, 1), |c, a, r| {
-        c.host().log.push(1000 + a[0]);
-        r[0] = a[0] * 2;
+        c.host().log.push(1000u64.wrapping_add(a[0]));
+        r[0] = a[0].wrapping_mul(2);
         Ok(if a[0] % 3 == 0 { HostOk::Yield } else { HostOk::Continue })
     });
     reg_host(&mut reg, "memw", ty64(2, 0), |c, a, _| {

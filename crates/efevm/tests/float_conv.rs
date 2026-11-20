@@ -1,5 +1,6 @@
 //! Instruction tests for every float op and conversion op (SPEC.md section 5).
 
+mod common;
 use efevm::*;
 use std::collections::HashSet;
 
@@ -36,7 +37,7 @@ fn exec(op: Op, args: &[u64]) -> Result<u64, Trap> {
     let idx = mb.add_func(ty, f);
     mb.export_func("main", idx);
     let module = mb.finish().expect("module");
-    let mut inst = Instance::new(&module, &Imports::<()>::new(), Limits::default()).unwrap();
+    let mut inst = common::new_instance(&module, &Imports::<()>::new(), Limits::default()).unwrap();
     let fiber = inst.spawn("main", args).unwrap();
     match inst.resume(fiber, &mut (), 1_000_000) {
         Exit::Done => Ok(inst.results(fiber).unwrap()[0]),

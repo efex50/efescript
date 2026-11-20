@@ -1,6 +1,7 @@
 //! Typed script events (E8.13): `EventDesc` in the registry and the API index (format
 //! version 2), section 14 `events` (SPEC.md 9.3) and the link check of event references.
 
+mod common;
 use efevm::binary::{decode, encode};
 use efevm::*;
 
@@ -444,7 +445,7 @@ fn link_checks_event_refs() {
     let imports = registry().imports();
     let good = module_with(&[("game", "score_changed", Some(("Score", 8))), ("game", "reset", None)]);
     assert_eq!(imports.check_module(&good), vec![]);
-    assert!(Instance::new(&good, &imports, Limits::default()).is_ok());
+    assert!(common::new_instance(&good, &imports, Limits::default()).is_ok());
 
     let bad = module_with(&[
         ("game", "nope", None),
@@ -480,7 +481,7 @@ fn link_checks_event_refs() {
         "payload mismatch for event game.score_changed: module expects &Score (12 bytes), host has &Score (8 bytes)"
     );
     // Instance::new refuses with the first error.
-    match Instance::new(&bad, &imports, Limits::default()) {
+    match common::new_instance(&bad, &imports, Limits::default()) {
         Err(LoadError::Link(e)) => assert_eq!(e, errs[0]),
         other => panic!("{:?}", other.err()),
     }

@@ -39,6 +39,9 @@ impl<H: 'static> Debugger<H> {
     ) -> Result<Self, String> {
         let mut instance = Instance::new(&module, imports, Limits::default())
             .map_err(|e| e.to_string())?;
+        // The debugger runs on the interpreter only (`Instance::step`). It makes its own
+        // instance, so no JIT backend is ever installed here; the `None` is explicit.
+        instance.set_backend(None);
         let fiber = instance.spawn(entry, &[])
             .map_err(|e| e.to_string())?;
         Ok(Debugger {
@@ -176,6 +179,9 @@ impl<H: 'static> Debugger<H> {
     }
 
     fn step_one_instruction(&mut self, host: &mut H) -> Exit {
+        // `instance_mut` hands out the instance: a backend installed through it is dropped, the
+        // debugger never runs compiled code.
+        self.instance.set_backend(None);
         self.instance.step(self.fiber, host)
     }
 

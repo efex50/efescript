@@ -19,7 +19,7 @@ fn one(np: usize, nr: usize, nregs: u16, body: impl FnOnce(&mut FunctionBuilder)
 }
 
 fn run_lim(m: &Module, limits: Limits, args: &[u64]) -> (Exit, Vec<u64>) {
-    let mut inst = Instance::new(m, &Imports::<()>::new(), limits).unwrap();
+    let mut inst = common::new_instance(m, &Imports::<()>::new(), limits).unwrap();
     let f = inst.spawn("main", args).unwrap();
     let exit = inst.resume(f, &mut (), 10_000_000);
     let res = inst.results(f).map(|r| r.to_vec()).unwrap_or_default();
@@ -460,7 +460,7 @@ fn mutual_recursion_even_odd() {
     assert_eq!(done(&m, &[1000]), vec![1]);
     assert_eq!(done(&m, &[1001]), vec![0]);
     assert_eq!(done(&m, &[0]), vec![1]);
-    let mut inst = Instance::new(&m, &Imports::<()>::new(), Limits::default()).unwrap();
+    let mut inst = common::new_instance(&m, &Imports::<()>::new(), Limits::default()).unwrap();
     let f = inst.spawn("odd", &[1000]).unwrap();
     assert_eq!(inst.resume(f, &mut (), 1_000_000), Exit::Done);
     assert_eq!(inst.results(f), Some(&[0u64][..]));
@@ -514,7 +514,7 @@ fn indirect_imports() -> Imports<()> {
 }
 
 fn run_ind(m: &Module, args: &[u64]) -> Exit {
-    let mut inst = Instance::new(m, &indirect_imports(), Limits::default()).unwrap();
+    let mut inst = common::new_instance(m, &indirect_imports(), Limits::default()).unwrap();
     let f = inst.spawn("main", args).unwrap();
     let e = inst.resume(f, &mut (), 100_000);
     if e == Exit::Done {
@@ -524,7 +524,7 @@ fn run_ind(m: &Module, args: &[u64]) -> Exit {
 }
 
 fn ind_result(m: &Module, args: &[u64]) -> u64 {
-    let mut inst = Instance::new(m, &indirect_imports(), Limits::default()).unwrap();
+    let mut inst = common::new_instance(m, &indirect_imports(), Limits::default()).unwrap();
     let f = inst.spawn("main", args).unwrap();
     assert_eq!(inst.resume(f, &mut (), 100_000), Exit::Done);
     inst.results(f).unwrap()[0]
@@ -681,7 +681,7 @@ fn ret_with_nonzero_base_from_entry() {
 #[test]
 fn entry_ret_gives_done_and_results_only_then() {
     let m = one(1, 1, 1, |f| f.ret(0));
-    let mut inst = Instance::new(&m, &Imports::<()>::new(), Limits::default()).unwrap();
+    let mut inst = common::new_instance(&m, &Imports::<()>::new(), Limits::default()).unwrap();
     let f = inst.spawn("main", &[77]).unwrap();
     assert_eq!(inst.results(f), None);
     assert_eq!(inst.resume(f, &mut (), 100), Exit::Done);
@@ -691,7 +691,7 @@ fn entry_ret_gives_done_and_results_only_then() {
 #[test]
 fn entry_with_zero_results() {
     let m = one(0, 0, 0, |f| f.ret(0));
-    let mut inst = Instance::new(&m, &Imports::<()>::new(), Limits::default()).unwrap();
+    let mut inst = common::new_instance(&m, &Imports::<()>::new(), Limits::default()).unwrap();
     let f = inst.spawn("main", &[]).unwrap();
     assert_eq!(inst.resume(f, &mut (), 100), Exit::Done);
     assert_eq!(inst.results(f), Some(&[][..]));
@@ -772,7 +772,7 @@ fn call_depth_one_allows_only_entry() {
 fn call_depth_zero_cannot_spawn() {
     let m = depth_module(3);
     let lim = Limits { max_call_depth: 0, ..Limits::default() };
-    let mut inst = Instance::new(&m, &Imports::<()>::new(), lim).unwrap();
+    let mut inst = common::new_instance(&m, &Imports::<()>::new(), lim).unwrap();
     assert_eq!(inst.spawn("main", &[0]).unwrap_err(), SpawnError::StackOverflow);
 }
 
@@ -792,7 +792,7 @@ fn max_registers_exceeded_is_stack_overflow() {
 fn max_registers_smaller_than_entry_frame_cannot_spawn() {
     let m = depth_module(100);
     let lim = Limits { max_registers: 99, ..Limits::default() };
-    let mut inst = Instance::new(&m, &Imports::<()>::new(), lim).unwrap();
+    let mut inst = common::new_instance(&m, &Imports::<()>::new(), lim).unwrap();
     assert_eq!(inst.spawn("main", &[0]).unwrap_err(), SpawnError::StackOverflow);
 }
 
@@ -819,7 +819,7 @@ fn unreachable_in_callee_traps_and_skips_rest() {
     let id = mb.add_func(ty(0, 0), m);
     mb.export_func("main", id);
     let module = mb.finish().unwrap();
-    let mut inst = Instance::new(&module, &Imports::<()>::new(), Limits::default()).unwrap();
+    let mut inst = common::new_instance(&module, &Imports::<()>::new(), Limits::default()).unwrap();
     let f = inst.spawn("main", &[]).unwrap();
     assert_eq!(inst.resume(f, &mut (), 100), Exit::Trap(Trap::Unreachable));
     assert_eq!(inst.global(g), Some(0));
@@ -834,7 +834,7 @@ fn nop_does_nothing_and_costs_one() {
         f.nop();
         f.ret(0);
     });
-    let mut inst = Instance::new(&m, &Imports::<()>::new(), Limits::default()).unwrap();
+    let mut inst = common::new_instance(&m, &Imports::<()>::new(), Limits::default()).unwrap();
     let f = inst.spawn("main", &[]).unwrap();
     let (e, n) = inst.resume_units(f, &mut (), 100);
     assert_eq!(e, Exit::Done);
@@ -855,7 +855,7 @@ fn instance_usable_after_trap() {
     mb.export_func("bad", bad_id);
     mb.export_func("good", good_id);
     let module = mb.finish().unwrap();
-    let mut inst = Instance::new(&module, &Imports::<()>::new(), Limits::default()).unwrap();
+    let mut inst = common::new_instance(&module, &Imports::<()>::new(), Limits::default()).unwrap();
     let b = inst.spawn("bad", &[]).unwrap();
     assert_eq!(inst.resume(b, &mut (), 100), Exit::Trap(Trap::Unreachable));
     let g = inst.spawn("good", &[]).unwrap();
@@ -880,7 +880,7 @@ fn instance_usable_after_stack_overflow() {
     mb.export_func("rec", f);
     mb.export_func("ok", ok_id);
     let module = mb.finish().unwrap();
-    let mut inst = Instance::new(&module, &Imports::<()>::new(), Limits::default()).unwrap();
+    let mut inst = common::new_instance(&module, &Imports::<()>::new(), Limits::default()).unwrap();
     let a = inst.spawn("rec", &[]).unwrap();
     assert_eq!(inst.resume(a, &mut (), 10_000_000), Exit::Trap(Trap::StackOverflow));
     let b = inst.spawn("ok", &[]).unwrap();

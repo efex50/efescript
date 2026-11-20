@@ -15,4 +15,4 @@ mod ctx;
 mod helpers;
 
 pub use backend::{JitBackend, enable, native_runs, native_stack_fallbacks, native_stack_resume_fallbacks};
-pub use compile::{JitCode, JitError, JitOptions, OptLevel, compile};
+pub use compile::{JitCode, JitError, JitOptions, MAX_JIT_REGISTERS, OptLevel, compile};

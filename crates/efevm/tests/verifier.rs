@@ -477,7 +477,7 @@ fn import_module() -> Module {
 fn link_missing_import() {
     let m = import_module();
     let imports: Imports<()> = Imports::new();
-    let e = Instance::new(&m, &imports, Limits::default()).err().expect("expected link error");
+    let e = common::new_instance(&m, &imports, Limits::default()).err().expect("expected link error");
     assert!(
         matches!(e, LoadError::Link(LinkError::MissingImport { ref namespace, ref name })
             if namespace == "env" && name == "f"),
@@ -492,7 +492,7 @@ fn link_import_type_mismatch() {
     reg_host(&mut imports, "env", "f", FuncType::new([ValType::I64], [ValType::I32]), |_c, _a, _r| {
         Ok(HostOk::Continue)
     });
-    let e = Instance::new(&m, &imports.imports(), Limits::default()).err().expect("expected link error");
+    let e = common::new_instance(&m, &imports.imports(), Limits::default()).err().expect("expected link error");
     assert!(
         matches!(e, LoadError::Link(LinkError::ImportTypeMismatch { ref namespace, ref name, ref module, ref host })
             if namespace == "env" && name == "f" && module == "(i32) -> i32" && host == "(i64) -> i32"),
@@ -505,7 +505,7 @@ fn link_import_exact_type_accepted() {
     let m = import_module();
     let mut imports = HostRegistry::<()>::new();
     reg_host(&mut imports, "env", "f", ty(1, 1), |_c, _a, _r| Ok(HostOk::Continue));
-    assert!(Instance::new(&m, &imports.imports(), Limits::default()).is_ok());
+    assert!(common::new_instance(&m, &imports.imports(), Limits::default()).is_ok());
 }
 
 #[test]

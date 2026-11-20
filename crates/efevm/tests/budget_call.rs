@@ -1,4 +1,5 @@
 //! Bulk memory cost and debt, default limits, fiber stack release, `Instance::call`.
+mod common;
 use efevm::ValType::I64;
 use efevm::*;
 
@@ -23,7 +24,7 @@ fn module(np: usize, nregs: u16, split: bool, body: impl FnOnce(&mut FunctionBui
 }
 
 fn inst(m: &Module) -> Instance<()> {
-    Instance::new(m, &Imports::<()>::new(), Limits::default()).unwrap()
+    common::new_instance(m, &Imports::<()>::new(), Limits::default()).unwrap()
 }
 
 /// `r0 = dst, r1 = src/value, r2 = len`, then the op.
@@ -335,7 +336,7 @@ fn call_out_of_budget_yield_and_spawn_errors() {
 #[test]
 fn call_frees_the_fiber_slot() {
     let limits = Limits { max_fibers: 2, ..Limits::default() };
-    let mut i = Instance::new(&call_module(), &Imports::<()>::new(), limits).unwrap();
+    let mut i = common::new_instance(&call_module(), &Imports::<()>::new(), limits).unwrap();
     for n in 0..20u64 {
         assert_eq!(i.call("add", &[n, 1], &mut (), 100), Ok(vec![n + 1]));
         assert!(matches!(i.call("trap", &[], &mut (), 100), Err(CallError::Trap { .. })));

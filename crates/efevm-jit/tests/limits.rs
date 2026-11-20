@@ -1,7 +1,6 @@
 //! Call depth, register-stack and native-stack limits.
 mod common;
 use common::*;
-use efevm::ValType::I64;
 use efevm::*;
 
 /// deep(n): n == 0 -> yield, return 0; else 1 + deep(n-1) (with a few extra registers).
@@ -107,5 +106,34 @@ fn native_stack_fallback_with_calls_and_hosts() {
                 }
             }
         }
+    }
+}
+
+/// Found by running the efevm binary tests on the JIT: a function with 65 535 registers made
+/// Cranelift overflow its block-parameter count and panic. Such modules are now refused
+/// (`TooManyRegisters`) and stay on the interpreter.
+#[test]
+fn a_function_with_too_many_registers_is_refused() {
+    use efevm::*;
+    use efevm_jit::{JitError, JitOptions, MAX_JIT_REGISTERS, compile};
+    for nregs in [u16::MAX, MAX_JIT_REGISTERS as u16 + 1] {
+        let mut mb = ModuleBuilder::new();
+        let mut f = FunctionBuilder::new(nregs);
+        f.const_i64(1, 7);
+        f.ret(1);
+        let id = mb.add_func(FuncType::new(vec![], vec![ValType::I64]), f);
+        mb.export_func("main", id);
+        let m = mb.finish().unwrap();
+        match compile(&m, &JitOptions::default()) {
+            Err(JitError::TooManyRegisters { func: 0, nregs: n }) => assert_eq!(n, nregs as u32),
+            other => panic!("expected TooManyRegisters, got {:?}", other.map(|_| ())),
+        }
+        // the interpreter runs it
+        let mut inst = Instance::new(&m, &Imports::<()>::new(), Limits::default()).unwrap();
+        assert!(efevm_jit::enable(&mut inst, &JitOptions::default()).is_err());
+        assert!(!inst.has_backend());
+        let f = inst.spawn("main", &[]).unwrap();
+        assert_eq!(inst.resume(f, &mut (), u64::MAX), Exit::Done);
+        assert_eq!(inst.results(f), Some(&[7][..]));
     }
 }

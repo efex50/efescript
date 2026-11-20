@@ -1,6 +1,7 @@
 //! Host registry, API index, section 12 `api`, linking with namespace versions, guest memory
 //! helpers and debugger hooks (crates/efescript/docs/e3-design.md sections 2, 3, 6, 8).
 
+mod common;
 use efevm::ValType::{I32, I64};
 use efevm::*;
 
@@ -72,12 +73,12 @@ fn hello_module(api: Option<(u64, Vec<(&str, u32)>)>, misuse: bool) -> Module {
 #[test]
 fn registry_functions_are_callable() {
     let reg = std_registry();
-    let mut inst = Instance::new(&hello_module(None, false), &reg.imports(), Limits::default()).unwrap();
+    let mut inst = common::new_instance(&hello_module(None, false), &reg.imports(), Limits::default()).unwrap();
     let mut out = Out::default();
     assert_eq!(inst.call("main", &[], &mut out, 1000), Ok(vec![42]));
     assert_eq!(out.lines, ["hello"]);
     // A host function that asks for a wrong parameter traps cleanly.
-    let mut inst = Instance::new(&hello_module(None, true), &reg.imports(), Limits::default()).unwrap();
+    let mut inst = common::new_instance(&hello_module(None, true), &reg.imports(), Limits::default()).unwrap();
     match inst.call("main", &[], &mut out, 1000) {
         Err(CallError::Trap { trap: Trap::Host(m), .. }) => assert!(m.contains("std.misuse"), "{m}"),
         e => panic!("{e:?}"),
@@ -125,26 +126,26 @@ fn link_checks_namespace_versions() {
     for h in [hash, hash ^ 1] {
         let m = hello_module(Some((h, vec![("std", 1)])), false);
         assert!(reg.imports().check_module(&m).is_empty());
-        assert!(Instance::new(&m, &reg.imports(), Limits::default()).is_ok());
+        assert!(common::new_instance(&m, &reg.imports(), Limits::default()).is_ok());
     }
     // Module built against std v1, host has std v2.
     let mut v2 = std_registry();
     v2.define_namespace("std", 2, "std", "Console output, v2.").unwrap();
     let m = hello_module(Some((hash, vec![("std", 1)])), false);
     let want = LinkError::NamespaceVersion { namespace: "std".into(), module: 1, host: 2 };
-    assert_eq!(Instance::new(&m, &v2.imports(), Limits::default()).err(), Some(LoadError::Link(want.clone())));
+    assert_eq!(common::new_instance(&m, &v2.imports(), Limits::default()).err(), Some(LoadError::Link(want.clone())));
     assert_eq!(want.to_string(), "namespace std is version 2, module was built against version 1");
     let errs = v2.imports().check_module(&m);
     assert_eq!(errs, vec![want, LinkError::ApiHash { module: hash, host: v2.imports().api_hash() }]);
     // Unknown namespace.
     let m = hello_module(Some((hash, vec![("std", 1), ("engine.world", 1)])), false);
     assert_eq!(
-        Instance::new(&m, &reg.imports(), Limits::default()).err(),
+        common::new_instance(&m, &reg.imports(), Limits::default()).err(),
         Some(LoadError::Link(LinkError::UnknownNamespace { namespace: "engine.world".into() }))
     );
     // Without section 12 versions are not checked.
     let m = hello_module(None, false);
-    assert!(Instance::new(&m, &v2.imports(), Limits::default()).is_ok());
+    assert!(common::new_instance(&m, &v2.imports(), Limits::default()).is_ok());
 }
 
 #[test]
@@ -179,7 +180,7 @@ fn check_module_lists_every_problem() {
     );
     assert!(errs[5].to_string().contains("fnv1a64:0000000000000007"));
     // `Instance::new` reports the first one.
-    assert_eq!(Instance::new(&m, &reg.imports(), Limits::default()).err(), Some(LoadError::Link(errs[0].clone())));
+    assert_eq!(common::new_instance(&m, &reg.imports(), Limits::default()).err(), Some(LoadError::Link(errs[0].clone())));
 }
 
 #[test]
@@ -304,7 +305,7 @@ fn caller_memory_helpers() {
     let f = mb.add_func(FuncType::new([], []), fb);
     mb.export_func("main", f);
     let m = mb.finish().unwrap();
-    let mut inst = Instance::new(&m, &reg.imports(), Limits::default()).unwrap();
+    let mut inst = common::new_instance(&m, &reg.imports(), Limits::default()).unwrap();
     let mut log = Vec::new();
     assert_eq!(inst.call("main", &[], &mut log, 10), Ok(vec![]));
     assert_eq!(log, ["ok"]);

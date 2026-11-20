@@ -1,4 +1,5 @@
 //! Basic blocks (SPEC section 5): leaders, costs, and `Instance::step`.
+mod common;
 use efevm::ValType::I64;
 use efevm::*;
 
@@ -17,7 +18,7 @@ fn one(np: usize, nr: usize, nregs: u16, body: impl FnOnce(&mut FunctionBuilder)
 }
 
 fn plain(m: &Module) -> Instance<()> {
-    Instance::new(m, &Imports::<()>::new(), Limits::default()).unwrap()
+    common::new_instance(m, &Imports::<()>::new(), Limits::default()).unwrap()
 }
 
 /// The blocks of function 0 tile the body: they are sorted, contiguous and cover every

@@ -5,6 +5,7 @@
 //! `op3`/`op2` into r2, `ret 2`. i64 params and results pass raw register bits through
 //! unchanged, so the tests see exactly what the VM computes.
 
+mod common;
 use std::collections::BTreeSet;
 
 use efevm::*;
@@ -51,7 +52,7 @@ fn run(emit: impl FnOnce(&mut FunctionBuilder), args: &[u64]) -> Result<u64, Tra
     mb.export_func("main", f);
     let module = mb.finish().expect("module should verify");
     let mut inst =
-        Instance::new(&module, &Imports::<()>::new(), Limits::default()).expect("instance");
+        common::new_instance(&module, &Imports::<()>::new(), Limits::default()).expect("instance");
     let fiber = inst.spawn("main", args).expect("spawn");
     match inst.resume(fiber, &mut (), 1_000_000) {
         Exit::Done => Ok(inst.results(fiber).expect("done fiber has results")[0]),

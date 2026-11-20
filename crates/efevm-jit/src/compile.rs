@@ -56,7 +56,15 @@ pub enum JitError {
     Codegen { func: u32, message: String },
     /// Cranelift's module layer failed.
     Module(String),
+    /// A function has more registers than [`MAX_JIT_REGISTERS`]: every register is an SSA
+    /// variable (a block parameter of every join point), so compile time and frame size grow
+    /// with it, and Cranelift's block-parameter count is capped at 65535. The module stays on
+    /// the interpreter.
+    TooManyRegisters { func: u32, nregs: u32 },
 }
+
+/// Most registers (`nregs`) a function may have to be compiled.
+pub const MAX_JIT_REGISTERS: u32 = 4096;
 
 impl fmt::Display for JitError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -65,6 +73,9 @@ impl fmt::Display for JitError {
             JitError::Unsupported { func, op } => write!(f, "jit: function {func}: unsupported op {}", op.name()),
             JitError::Codegen { func, message } => write!(f, "jit: function {func}: {message}"),
             JitError::Module(m) => write!(f, "jit: {m}"),
+            JitError::TooManyRegisters { func, nregs } => {
+                write!(f, "jit: function {func} has {nregs} registers (the JIT compiles at most {MAX_JIT_REGISTERS})")
+            }
         }
     }
 }
@@ -148,6 +159,12 @@ fn cg_err(func: u32, e: impl fmt::Display) -> JitError {
 
 /// Compiles every function of `module`.
 pub fn compile(module: &VmModule, opts: &JitOptions) -> Result<Arc<JitCode>, JitError> {
+    let nimports = module.data().imports.len();
+    for (i, f) in module.data().functions.iter().enumerate() {
+        if u32::from(f.nregs) > MAX_JIT_REGISTERS {
+            return Err(JitError::TooManyRegisters { func: (nimports + i) as u32, nregs: u32::from(f.nregs) });
+        }
+    }
     let mut flags = settings::builder();
     let set = |f: &mut settings::Builder, k: &str, v: &str| f.set(k, v).map_err(|e| JitError::UnsupportedHost(e.to_string()));
     set(&mut flags, "use_colocated_libcalls", "false")?;

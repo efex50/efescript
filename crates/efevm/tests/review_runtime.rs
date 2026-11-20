@@ -26,7 +26,7 @@ fn spawn_args_are_masked() {
     let g = mb.add_func(ty(&[F32, I64], &[F32, I64]), fb);
     mb.export_func("mixed", g);
     let m = mb.finish().unwrap();
-    let mut i = Instance::new(&m, &Imports::<()>::new(), Limits::default()).unwrap();
+    let mut i = common::new_instance(&m, &Imports::<()>::new(), Limits::default()).unwrap();
     let a = i.spawn("id32", &[u64::MAX]).unwrap();
     assert_eq!(run_done(&mut i, &mut (), a), vec![0xFFFF_FFFF]);
     let b = i.spawn("mixed", &[u64::MAX, u64::MAX]).unwrap();
@@ -55,7 +55,7 @@ fn host_results_are_masked() {
             r[0] = u64::MAX;
             Ok(HostOk::Continue)
         });
-        let mut i = Instance::new(&m, &imports.imports(), Limits::default()).unwrap();
+        let mut i = common::new_instance(&m, &imports.imports(), Limits::default()).unwrap();
         let f = i.spawn("main", &[]).unwrap();
         assert_eq!(run_done(&mut i, &mut (), f), vec![want], "{t:?}");
     }
@@ -81,7 +81,7 @@ fn set_global_is_masked() {
         cx.set_global(gf, u64::MAX - 1)?;
         Ok(HostOk::Continue)
     });
-    let mut i = Instance::new(&m, &imports.imports(), Limits::default()).unwrap();
+    let mut i = common::new_instance(&m, &imports.imports(), Limits::default()).unwrap();
     assert!(i.set_global(g32, u64::MAX));
     assert!(i.set_global(g64, u64::MAX));
     assert!(i.set_global(gf, u64::MAX));
@@ -126,7 +126,7 @@ fn trap_location_and_backtrace_three_deep() {
     mb.define(c, fb);
     mb.export_func("main", main);
     let m = mb.finish().unwrap();
-    let mut i = Instance::new(&m, &Imports::<()>::new(), Limits::default()).unwrap();
+    let mut i = common::new_instance(&m, &Imports::<()>::new(), Limits::default()).unwrap();
     let f = i.spawn("main", &[]).unwrap();
     assert_eq!(i.trap_location(f), None);
     assert_eq!(i.backtrace(f), None);
@@ -151,7 +151,7 @@ fn host_trap_reports_call_instruction() {
     let m = mb.finish().unwrap();
     let mut imports = HostRegistry::<()>::new();
     reg_host(&mut imports, "env", "boom", ty(&[], &[]), |_, _, _| Err(Trap::Host("x".into())));
-    let mut i = Instance::new(&m, &imports.imports(), Limits::default()).unwrap();
+    let mut i = common::new_instance(&m, &imports.imports(), Limits::default()).unwrap();
     let fid = i.spawn("main", &[]).unwrap();
     assert!(matches!(i.resume(fid, &mut (), 100), Exit::Trap(Trap::Host(_))));
     assert_eq!(i.trap_location(fid), Some((f, 1)));
@@ -174,7 +174,7 @@ fn caller_fiber_matches_spawned_id() {
         cx.host().push(id);
         Ok(HostOk::Continue)
     });
-    let mut i = Instance::new(&m, &imports.imports(), Limits::default()).unwrap();
+    let mut i = common::new_instance(&m, &imports.imports(), Limits::default()).unwrap();
     let a = i.spawn("main", &[]).unwrap();
     let b = i.spawn("main", &[]).unwrap();
     let mut seen = Vec::new();
@@ -191,7 +191,7 @@ fn spawn_func_out_of_range() {
     fb.ret(0);
     let f = mb.add_func(ty(&[], &[]), fb);
     let m = mb.finish().unwrap();
-    let mut i = Instance::new(&m, &Imports::<()>::new(), Limits::default()).unwrap();
+    let mut i = common::new_instance(&m, &Imports::<()>::new(), Limits::default()).unwrap();
     assert!(i.spawn_func(f, &[]).is_ok());
     assert_eq!(i.spawn_func(f + 1, &[]), Err(SpawnError::NotAFunction));
     assert_eq!(i.spawn_func(u32::MAX, &[]), Err(SpawnError::NotAFunction));
@@ -209,6 +209,6 @@ fn many_distinct_types_instantiate_fast() {
     let data = ModuleData { types, ..ModuleData::default() };
     let m = Module::new(data).unwrap();
     let t = std::time::Instant::now();
-    let _i = Instance::new(&m, &Imports::<()>::new(), Limits::default()).unwrap();
+    let _i = common::new_instance(&m, &Imports::<()>::new(), Limits::default()).unwrap();
     assert!(t.elapsed() < std::time::Duration::from_secs(2), "{:?}", t.elapsed());
 }

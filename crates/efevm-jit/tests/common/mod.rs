@@ -7,6 +7,7 @@ use efevm_jit::{JitBackend, JitOptions, compile};
 use std::sync::Arc;
 
 pub mod prog;
+pub mod randmod;
 
 /// Host state: a log of what host functions saw.
 #[derive(Debug, Default, PartialEq, Clone)]
@@ -39,7 +40,8 @@ pub fn reg_host(
     f: impl Fn(&mut Caller<'_, Hs>, &[u64], &mut [u64]) -> Result<HostOk, Trap> + Send + Sync + 'static,
 ) {
     if reg.namespace("env").is_none() {
-        reg.define_namespace("env", 1, "test", "Test functions.").unwrap();
+        reg.define_namespace("env", 1, "test", "Test functions.")
+            .unwrap();
     }
     let d = raw_desc("env", name, &ty);
     let w = move |c: &mut Caller<'_, Hs>, a: &Args<'_>, r: &mut Results<'_>| f(c, a.raw(), r.raw());
@@ -56,7 +58,14 @@ pub struct Cfg {
 
 impl Default for Cfg {
     fn default() -> Self {
-        Cfg { limits: Limits::default(), jit: JitOptions { verify: true, ..JitOptions::default() }, nan: false }
+        Cfg {
+            limits: Limits::default(),
+            jit: JitOptions {
+                verify: true,
+                ..JitOptions::default()
+            },
+            nan: false,
+        }
     }
 }
 
@@ -117,7 +126,9 @@ pub fn snap(inst: &Instance<Hs>, f: FiberId, exit: Exit, units: u64, host: &Hs, 
         f_bt: inst.fiber_backtrace(f),
         f_regs: inst.fiber_registers(f).map(|r| normv(r, nan)),
         memory: mem_hash(inst.memory().as_slice()),
-        globals: (0..ng).map(|g| norm(inst.global(g).unwrap(), nan)).collect(),
+        globals: (0..ng)
+            .map(|g| norm(inst.global(g).unwrap(), nan))
+            .collect(),
         host: host.clone(),
     }
 }
@@ -196,7 +207,13 @@ pub fn diff_cfg(
     Pair::new(m, reg, cfg).run(entry, args, budgets)
 }
 
-pub fn diff(m: &Module, reg: &HostRegistry<Hs>, entry: &str, args: &[u64], budgets: &[u64]) -> Snap {
+pub fn diff(
+    m: &Module,
+    reg: &HostRegistry<Hs>,
+    entry: &str,
+    args: &[u64],
+    budgets: &[u64],
+) -> Snap {
     diff_cfg(m, reg, entry, args, budgets, &Cfg::default())
 }
 
@@ -226,7 +243,16 @@ pub fn diff_all(m: &Module, reg: &HostRegistry<Hs>, entry: &str, args: &[u64]) -
 /// Cross-backend resume: a reference interpreter run, and a second instance that switches
 /// between the JIT and the interpreter at every resume following `pattern` (cycled; `true` =
 /// JIT). Both use `budgets`; all observations must match the reference after every resume.
-pub fn cross(code: &Arc<efevm_jit::JitCode>, m: &Module, reg: &HostRegistry<Hs>, entry: &str, args: &[u64], budgets: &[u64], pattern: &[bool], cfg: &Cfg) {
+pub fn cross(
+    code: &Arc<efevm_jit::JitCode>,
+    m: &Module,
+    reg: &HostRegistry<Hs>,
+    entry: &str,
+    args: &[u64],
+    budgets: &[u64],
+    pattern: &[bool],
+    cfg: &Cfg,
+) {
     let mut a = interp_inst(m, reg, cfg.limits);
     let mut b = interp_inst(m, reg, cfg.limits);
     let (mut ha, mut hb) = (Hs::default(), Hs::default());
@@ -235,7 +261,11 @@ pub fn cross(code: &Arc<efevm_jit::JitCode>, m: &Module, reg: &HostRegistry<Hs>,
     for k in 0..MAX_STEPS {
         let budget = budgets[k % budgets.len()];
         let jit = pattern[k % pattern.len()];
-        b.set_backend(if jit { Some(Box::new(JitBackend::<Hs>::new(Arc::clone(&code)))) } else { None });
+        b.set_backend(if jit {
+            Some(Box::new(JitBackend::<Hs>::new(Arc::clone(&code))))
+        } else {
+            None
+        });
         let (ea, ua) = a.resume_units(fa, &mut ha, budget);
         let (eb, ub) = b.resume_units(fb, &mut hb, budget);
         let sa = snap(&a, fa, ea.clone(), ua, &ha, cfg.nan);
@@ -246,4 +276,96 @@ pub fn cross(code: &Arc<efevm_jit::JitCode>, m: &Module, reg: &HostRegistry<Hs>,
         }
     }
     panic!("runaway program");
+}
+
+/// What a fuzz case did: resumes, total units, how it ended.
+#[derive(Debug, Clone)]
+pub struct Outcome {
+    pub steps: usize,
+    pub units: u64,
+    pub end: String,
+}
+
+/// Runs the generated case of `seed` on the interpreter (reference), on the JIT, and on an
+/// instance that switches between the JIT and the interpreter at random resumes, comparing
+/// everything observable after every resume. Returns the number of resumes, or the first
+/// difference as text.
+const CAP: usize = 4000;
+
+pub fn fuzz_case(seed: u64) -> Result<Outcome, String> {
+    use efevm_jit::OptLevel;
+    let mut case = randmod::gen_case(seed);
+    let reg = prog::registry();
+    let cfg = Cfg {
+        limits: case.limits,
+        jit: JitOptions {
+            verify: seed % 8 == 0,
+            opt_level: if case.opt_none {
+                OptLevel::None
+            } else {
+                OptLevel::Speed
+            },
+            ..JitOptions::default()
+        },
+        nan: false,
+    };
+    let m = &case.module;
+    let code = compile(m, &cfg.jit).map_err(|e| format!("seed {seed}: compile failed: {e}"))?;
+    let mut a = interp_inst(m, &reg, cfg.limits);
+    let mut b = interp_inst(m, &reg, cfg.limits);
+    b.set_backend(Some(Box::new(JitBackend::<Hs>::new(Arc::clone(&code)))));
+    let mut c = interp_inst(m, &reg, cfg.limits);
+    let (mut ha, mut hb, mut hc) = (Hs::default(), Hs::default(), Hs::default());
+    let fa = a.spawn("main", &case.args).unwrap();
+    let fb = b.spawn("main", &case.args).unwrap();
+    let fc = c.spawn("main", &case.args).unwrap();
+    let mut pattern = Vec::new();
+    let mut units = 0u64;
+    for k in 0..CAP {
+        let budget = case.budgets[k % case.budgets.len()];
+        let jit = case.rng.chance(2, 3);
+        pattern.push(jit);
+        c.set_backend(if jit {
+            Some(Box::new(JitBackend::<Hs>::new(Arc::clone(&code))))
+        } else {
+            None
+        });
+        let (ea, ua) = a.resume_units(fa, &mut ha, budget);
+        let (eb, ub) = b.resume_units(fb, &mut hb, budget);
+        let (ec, uc) = c.resume_units(fc, &mut hc, budget);
+        let sa = snap(&a, fa, ea.clone(), ua, &ha, false);
+        let sb = snap(&b, fb, eb, ub, &hb, false);
+        let sc = snap(&c, fc, ec, uc, &hc, false);
+        let ctx = || {
+            format!(
+                "seed {seed}, step {k}, budget {budget}, budgets {:?}, limits {:?}, opt_none {}, switch pattern {pattern:?}",
+                case.budgets, case.limits, case.opt_none
+            )
+        };
+        units += ua;
+        if sa != sb {
+            return Err(format!(
+                "JIT differs: {}\n interpreter: {sa:?}\n jit:         {sb:?}",
+                ctx()
+            ));
+        }
+        if sa != sc {
+            return Err(format!(
+                "switching differs: {}\n interpreter: {sa:?}\n switching:  {sc:?}",
+                ctx()
+            ));
+        }
+        if matches!(ea, Exit::Done | Exit::Trap(_)) {
+            return Ok(Outcome {
+                steps: k + 1,
+                units,
+                end: format!("{:?}", ea),
+            });
+        }
+    }
+    Ok(Outcome {
+        steps: CAP,
+        units,
+        end: "cap".into(),
+    })
 }

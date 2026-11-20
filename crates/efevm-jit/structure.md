@@ -1,6 +1,6 @@
 # efevm-jit
 
-`efevm-jit` compiles verified `efevm` modules to native code with Cranelift 0.137 (roadmap E7, phases J1-J4) and runs fibers through the `efevm::backend::Backend` seam. It is observably identical to the interpreter (SPEC draft 8): same `Exit` sequence, results, memory, globals, `resume_units`, trap kind and location, backtraces, fiber registers/location/backtrace while suspended. The one allowed difference is the payload of NaN results of float arithmetic. **Used by: nothing yet (engine integration is J5).**
+`efevm-jit` compiles verified `efevm` modules to native code with Cranelift 0.137 (roadmap E7, phases J1-J6) and runs fibers through the `efevm::backend::Backend` seam. It is observably identical to the interpreter (SPEC draft 8): same `Exit` sequence, results, memory, globals, `resume_units`, trap kind and location, backtraces, fiber registers/location/backtrace while suspended. The one allowed difference is the payload of NaN results of float arithmetic. **Used by: `efeengine-core` (feature `jit`, J5; game modules by default, mods only with `Grant::jit`).**
 
 ## At a glance
 | | |
@@ -18,7 +18,8 @@ pub struct JitCode;                       // Send + Sync; owns the executable me
 pub fn compile(&efevm::Module, &JitOptions) -> Result<Arc<JitCode>, JitError>;
 pub struct JitBackend<H>;                 // impl Backend<H>; JitBackend::new(Arc<JitCode>)
 pub fn enable<H: 'static>(&mut Instance<H>, &JitOptions) -> Result<(), JitError>;   // compile + set_backend
-pub enum JitError { UnsupportedHost(String), Unsupported { func, op }, Codegen { func, message }, Module(String) }  // Display + Error
+pub enum JitError { UnsupportedHost(String), Unsupported { func, op }, Codegen { func, message }, Module(String), TooManyRegisters { func, nregs } }  // Display + Error
+pub const MAX_JIT_REGISTERS: u32 = 4096;  // a function with more registers is refused (the module stays interpreted)
 // diagnostics (process-wide counters): native_runs(), native_stack_fallbacks(), native_stack_resume_fallbacks()
 ```
 `JitBackend::run` compares the module data pointer of `cx.module` with the compiled module (`JitCode` keeps a clone, so the pointer cannot be reused) and delegates to `run_interpreter` for any other module, for a fiber not at a leader, and for a malformed stack.
@@ -70,23 +71,42 @@ All 181 ops of `Op::ALL` are lowered; `JitError::Unsupported` exists but is neve
 | `memory.rs` | every load and store x offsets x boundary and overflowing bases, `memory.size/grow` with remap, copy/fill charging, globals |
 | `calls.rs` | the program under 8 budget sets, trap kinds, cross-backend resume at every suspension point (JIT/interpreter alternating by pattern), `step` mixed with JIT resumes |
 | `limits.rs` | `max_call_depth` and `max_registers` traps at the same location, deep recursion past a tiny native stack (several limits, including 0), the program with a tiny native stack |
+| `debugger.rs` | the efescript debugger drops a JIT installed on its instance and never runs native code |
+| `fuzz.rs`, `common/randmod.rs` | J6 differential fuzzing, see below |
 | `examples.rs` | every `crates/efescript/examples/*.efa` with the real `std` host, both backends, 5 budget sequences |
 
 Run: `cargo test -p efevm-jit` (debug: about a minute; Cranelift itself is slow in debug).
 
+### J6: differential testing
+- **efevm's own tests on the JIT.** `crates/efevm/tests/common/mod.rs::new_instance` is `Instance::new` plus, with `EFEVM_TEST_BACKEND=jit`, `efevm_jit::enable`. All integration tests of `efevm` (except `backend.rs`, which tests the seam itself) create their instances through it, so `EFEVM_TEST_BACKEND=jit cargo test -p efevm --tests` runs about 300 tests with the same expectations on the JIT (efevm has a dev-dependency on efevm-jit; a module with a function over `MAX_JIT_REGISTERS` registers stays interpreted). First run found the register-count bug below.
+- **Random modules.** `tests/common/randmod.rs` builds verified modules with `ModuleBuilder` from a seed (SplitMix64): 2-5 functions of 4 types, a table with matching and mismatching entries, 6 mutable and immutable globals of all four types, memory with random max, the host functions of `prog::registry` (host yields, host errors, a host that grows memory, host global access). Statements: all 181-op groups (integer ops of every width, comparisons, conversions, float ops over inputs like NaN, -0, infinities and range edges), loads and stores of every width in and out of bounds, `memory.size/grow/copy/fill`, globals, `select`, if/else, bounded loops, `br_table`, direct, indirect and host calls, `yield`, early `ret`, `unreachable`. Termination: loops have constant trip counts, direct calls go to higher indexes, a fuel global bounds function entries. Half the modules are "safe" (divisors forced odd, addresses masked) to reach deep code; the rest trap often. Random `Limits` (call depth, registers, memory pages), random Cranelift `opt_level`.
+- **NaN payloads** (SPEC: "some NaN") are the one allowed difference, so after a float op that can produce a NaN the generator emits `select d, d != d, CANON_NAN, d`; everything else, including the NaN-ness and sign handling, is compared bit for bit.
+- **Comparison.** `common::fuzz_case(seed)` runs the case on the interpreter (reference), on the JIT, and on a third instance that switches between JIT and interpreter at random resumes (2/3 JIT), all with the same random budget sequence (0, 1, 2, small, up to 2000, unlimited), and compares after every resume: exit, units used, fiber status, results, trap location and backtrace, fiber location/backtrace/registers while suspended, memory (hash), all globals, the host call log.
+- **Runs.** `cargo test -p efevm-jit --test fuzz` runs `fuzz_short` (150 seeded cases; `EFEVM_FUZZ_CASES`, `EFEVM_FUZZ_SEED`). Long run: `EFEVM_FUZZ_SECS=600 EFEVM_FUZZ_SEED=1 cargo test -p efevm-jit --release --test fuzz -- --ignored fuzz_long --nocapture` (also `EFEVM_FUZZ_ITERS`, `EFEVM_FUZZ_TRACE=1` prints each seed); it prints failing seeds and a histogram of how programs ended. Replay a seed: `EFEVM_FUZZ_SEED=<seed> EFEVM_FUZZ_CASES=1 cargo test -p efevm-jit --test fuzz fuzz_short`.
+- **Result (release, this machine):** `fuzz_long` seed 100000, 823 s, 9225 cases, 771 914 resumes, 65.4 M units compared: 0 differences. Ends: 1885 Done, 7 kinds of trap (div by zero 667, out of bounds 1904, indirect type mismatch 1817, stack overflow 1805, undefined element 450, host error 116, overflow 143, invalid conversion 137, unreachable 179), 122 cut off at the resume cap.
+- **Bugs found:** (1) a function with more than 65 533 registers panicked inside Cranelift (block-parameter overflow); fixed by refusing functions over `MAX_JIT_REGISTERS` (4096) with `JitError::TooManyRegisters`; regression test `limits::a_function_with_too_many_registers_is_refused`. (2) The first fuzz runs showed NaN payload differences of float results (interpreter canonical NaN, JIT propagating the input payload): allowed by the SPEC, handled in the generator as above, not a code change.
+- **`Grant::jit` default stays `false`.** Fuzzing was clean for 14 minutes and 9k programs, but that is one machine, x86-64 only, and not coverage-guided; the JIT is unsafe code that runs untrusted mods. Recommendation: flip it only after a much longer run (hours, several seeds, ideally also on aarch64) and a cargo-fuzz target with coverage feedback.
+
 ## Benchmark (`cargo run -p efevm-jit --release --example bench`, this machine, x86-64)
 | Program | interpreter ns/instr | JIT ns/instr |
 |---|---|---|
-| count loop, unlimited budget | 3.09 | 0.47 |
-| count loop, budget 10000 per resume | 3.13 | 0.49 |
-| recursive fib(32), unlimited | 7.24 | 1.31 |
-| recursive fib(32), budget 10000 | 7.19 | 1.46 |
+| count loop, unlimited budget | 3.24 | 0.47 |
+| count loop, budget 10000 per resume | 3.28 | 0.49 |
+| recursive fib(32), unlimited | 7.45 | 1.26 |
+| recursive fib(32), budget 10000 | 7.22 | 1.41 |
+| memory loop (load + store, bounds checks), unlimited | 3.35 | 0.33 |
+| memory loop, budget 10000 | 3.40 | 0.34 |
+| f64 mul/add loop, unlimited | 3.11 | 0.95 |
+| f64 mul/add loop, budget 10000 | 3.06 | 0.97 |
+
+Compile time (Cranelift, `opt_level` speed): 0.5-1.1 ms for these small modules.
 
 Unit counts are asserted equal between the two.
 
 ## Known limits
+- Functions with more than 4096 registers are not compiled (the whole module then stays on the interpreter).
 - All registers of a function are live at every leader (the cold suspend paths read them), which limits register allocation; register typing and merged budget checks are J7.
 - Compile time is per whole module at `enable`; no lazy compilation. Functions with very large `nregs` get a large native frame and a large cold path per suspension point.
 - A panic in a host function aborts the process (it unwinds through generated code, which has no unwind info); the interpreter would propagate it.
-- Only exercised on x86-64.
+- Only exercised on x86-64. Not yet fuzzed with coverage feedback (the J6 generator is seeded and not coverage-guided).
 - NaN payloads of float arithmetic results are not guaranteed identical to the interpreter's (SPEC: "some NaN").
